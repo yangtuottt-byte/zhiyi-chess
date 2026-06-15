@@ -79,6 +79,8 @@ export interface ChessboardProps {
   aiHints: AIHintDisplay[];
   currentSide: Side;
   onCellClick: (row: number, col: number) => void;
+  /** 棋盘锁定：AI 思考中/非己方回合时阻止交互并显示遮罩 */
+  boardLocked?: boolean;
 }
 
 // ─── 棋盘组件 ──────────────────────────────────────────────────────
@@ -90,6 +92,7 @@ export default function Chessboard({
   aiHints,
   currentSide,
   onCellClick,
+  boardLocked = false,
 }: ChessboardProps) {
   // 快速查找集合
   const legalSet = new Set(legalMoves.map((m) => `${m.row},${m.col}`));
@@ -309,6 +312,15 @@ export default function Chessboard({
       <div className="absolute top-1 right-2 text-xs font-bold text-amber-800/70 z-30 pointer-events-none">
         {currentSide === Side.Red ? '红方走' : '黑方走'}
       </div>
+
+      {/* ══════════════ AI 思考锁屏遮罩 ══════════════ */}
+      {boardLocked && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center rounded-xl bg-black/30 backdrop-blur-[1px]">
+          <div className="rounded-lg bg-gray-900/90 px-6 py-3 text-sm font-bold text-amber-400 shadow-xl animate-pulse">
+            AI 思考中...
+          </div>
+        </div>
+      )}
     </div>
   );
 }

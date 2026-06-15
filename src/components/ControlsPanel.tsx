@@ -1,35 +1,40 @@
 'use client';
 
-import React from 'react';
 import { Side } from '@/core/types';
+import type { GameMode, GameStatus } from '@/hooks/useChessGame';
 
 export interface ControlsPanelProps {
-  // 游戏操作
+  // 模式
+  gameMode: GameMode;
+  onSetGameMode: (mode: GameMode) => void;
+
+  // 难度 (仅对战模式)
+  aiDepth: number;
+  onSetAiDepth: (depth: number) => void;
+
+  // 状态
+  engineStatus: string;
+  currentTurn: 'w' | 'b';
+  gameStatus: GameStatus;
+  moveCount: number;
+
+  // 操作
   onUndo: () => void;
   onReset: () => void;
   canUndo: boolean;
-  moveCount: number;
 
   // AI 分析
   onAnalyze: () => void;
   onClearHints: () => void;
-  loading: boolean;
+  aiThinking: boolean;
   hasHints: boolean;
   isElectron: boolean;
 
-  // 状态
-  engineStatus: string;
-  currentSide: Side;
-  isInCheck: boolean;
-  isCheckmated: boolean;
-
-  // AI 结果
+  // 结果
   aiResult: {
-    sideToMove?: string;
     moves: Array<{
       multipv: number;
       score: number;
-      scoreType?: string;
       depth: number;
       pv: string[];
     }>;
@@ -37,41 +42,124 @@ export interface ControlsPanelProps {
   error: string | null;
 }
 
+const MODE_LABELS: Record<GameMode, string> = {
+  practice: '练习模式',
+  coach: 'AI 教学',
+  battle: '人机对战',
+};
+
+const MODE_DESC: Record<GameMode, string> = {
+  practice: '玩家操控红黑双方，自由打谱',
+  coach: '玩家执红，AI 执黑 · 实时提示 Top 3 走法',
+  battle: '玩家执红，AI 执黑 · 无提示，纯对战',
+};
+
+const DEPTH_OPTIONS = [
+  { label: '简单', value: 5 },
+  { label: '中等', value: 10 },
+  { label: '困难', value: 15 },
+];
+
 export default function ControlsPanel({
-  onUndo, onReset, canUndo, moveCount,
-  onAnalyze, onClearHints, loading, hasHints, isElectron,
-  engineStatus, currentSide, isInCheck, isCheckmated,
+  gameMode, onSetGameMode,
+  aiDepth, onSetAiDepth,
+  engineStatus, currentTurn, gameStatus, moveCount,
+  onUndo, onReset, canUndo,
+  onAnalyze, onClearHints, aiThinking, hasHints, isElectron,
   aiResult, error,
 }: ControlsPanelProps) {
   return (
     <div className="w-full max-w-[552px] space-y-4">
-      {/* ── 状态栏 ── */}
+      {/* ── 模式切换 Tab ── */}
+      <div className="flex rounded-lg border border-gray-700 bg-gray-800/50 p-1">
+        {(Object.entries(MODE_LABELS) as [GameMode, string][]).map(([mode, label]) => (
+          <button
+            key={mode}
+            onClick={() => onSetGameMode(mode)}
+            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
+              gameMode === mode
+                ? 'bg-amber-500 text-gray-900 shadow'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* 当前模式说明 */}
+      <p className="text-xs text-gray-500 leading-relaxed">
+        {MODE_DESC[gameMode]}
+      </p>
+
+      {/* ── 信息条 ── */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
         <span>
           引擎:{' '}
-          <span className={engineStatus.includes('就绪') ? 'text-green-400' : 'text-yellow-400'}>
+          <span
+            className={
+              engineStatus.includes('就绪')
+                ? 'text-green-400'
+                : 'text-yellow-400'
+            }
+          >
             {engineStatus}
           </span>
         </span>
         <span>
           行棋:{' '}
-          <span className={currentSide === Side.Red ? 'text-red-400 font-semibold' : 'text-gray-200 font-semibold'}>
-            {currentSide === Side.Red ? '红方' : '黑方'}
+          <span
+            className={
+              currentTurn === 'w'
+                ? 'text-red-400 font-semibold'
+                : 'text-gray-200 font-semibold'
+            }
+          >
+            {currentTurn === 'w' ? '红方' : '黑方'}
           </span>
         </span>
-        {isInCheck && <span className="text-red-400 font-bold animate-pulse">将军!</span>}
-        {isCheckmated && <span className="text-red-500 font-bold text-base">将死!</span>}
+        {aiThinking && (
+          <span className="text-amber-400 font-bold animate-pulse">AI 思考中...</span>
+        )}
+        {gameStatus === 'check' && (
+          <span className="text-red-400 font-bold animate-pulse">将军!</span>
+        )}
+        {gameStatus === 'gameover' && (
+          <span className="text-red-500 font-bold">将死 — 游戏结束</span>
+        )}
         <span className="text-gray-600">步数: {moveCount}</span>
       </div>
 
-      {/* ── 按钮区 ── */}
+      {/* ── AI 难度选择 (教学 & 对战) ── */}
+      {(gameMode === 'battle' || gameMode === 'coach') && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">AI 难度:</span>
+          <div className="flex rounded border border-gray-700 bg-gray-800/50 p-0.5">
+            {DEPTH_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onSetAiDepth(opt.value)}
+                className={`rounded px-3 py-1 text-xs transition ${
+                  aiDepth === opt.value
+                    ? 'bg-amber-500/20 text-amber-400'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── 操作按钮 ── */}
       <div className="flex flex-wrap gap-2">
         <button
           onClick={onUndo}
           disabled={!canUndo}
           className="rounded border border-gray-600 px-4 py-1.5 text-sm text-gray-300 transition hover:border-gray-400 hover:bg-gray-700 disabled:opacity-30"
         >
-          悔棋
+          悔棋{gameMode !== 'practice' ? ' (回退2步)' : ''}
         </button>
         <button
           onClick={onReset}
@@ -79,13 +167,17 @@ export default function ControlsPanel({
         >
           新局
         </button>
-        <button
-          onClick={onAnalyze}
-          disabled={loading || !isElectron}
-          className="rounded bg-amber-500 px-4 py-1.5 text-sm font-semibold text-gray-900 transition hover:bg-amber-400 disabled:opacity-50"
-        >
-          {loading ? '分析中...' : 'AI 分析'}
-        </button>
+
+        {/* AI 分析按钮 — 仅在练习模式显示，供玩家手动请求提示 */}
+        {gameMode === 'practice' && (
+          <button
+            onClick={onAnalyze}
+            disabled={aiThinking || !isElectron}
+            className="rounded bg-amber-500 px-4 py-1.5 text-sm font-semibold text-gray-900 transition hover:bg-amber-400 disabled:opacity-50"
+          >
+            {aiThinking ? '分析中...' : 'AI 分析'}
+          </button>
+        )}
         {hasHints && (
           <button
             onClick={onClearHints}
@@ -119,15 +211,22 @@ export default function ControlsPanel({
                     : 'border-gray-700/50'
                 }`}
               >
-                <span className="font-bold text-amber-400 text-xs">#{m.multipv}</span>
+                <span className="text-xs font-bold text-amber-400">
+                  #{m.multipv}
+                </span>
                 <span
                   className={`text-xs tabular-nums ${
-                    m.score > 0 ? 'text-green-400' : m.score < 0 ? 'text-red-400' : 'text-gray-400'
+                    m.score > 0
+                      ? 'text-green-400'
+                      : m.score < 0
+                        ? 'text-red-400'
+                        : 'text-gray-400'
                   }`}
                 >
-                  {m.score > 0 ? '+' : ''}{m.score}
+                  {m.score > 0 ? '+' : ''}
+                  {m.score}
                 </span>
-                <span className="text-gray-300 text-xs">
+                <span className="text-xs text-gray-300">
                   {m.pv.slice(0, 4).join(' ')}
                 </span>
               </div>

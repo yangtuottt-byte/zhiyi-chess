@@ -1,12 +1,17 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { Board, Piece, Position, Side, createInitialBoard } from '@/core/types';
-import { getLegalMoves, getAllLegalMoves, isCheckmated, isInCheck } from '@/core/rules';
+import { Board, Piece, Position, Side } from '@/core/types';
+import { getLegalMoves, isInCheck, isCheckmated } from '@/core/rules';
 import { fenToBoard, boardToFen } from '@/lib/fen';
 
 const DEFAULT_FEN =
   'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
+
+// ─── 类型 ─────────────────────────────────────────────────────────
+
+export type GameMode = 'practice' | 'coach' | 'battle';
+export type GameStatus = 'playing' | 'check' | 'gameover';
 
 export interface AIHint {
   multipv: number;
@@ -17,37 +22,67 @@ export interface AIHint {
   pv: string[];
 }
 
-interface HistoryEntry {
-  from: Position;
-  to: Position;
-  captured: Piece | null;
-  prevFen: string;
-  prevSide: Side;
+export interface UseChessGameOptions {
+  initialFen?: string;
 }
 
 export interface UseChessGameReturn {
+  // 核心状态
   board: Board;
   fen: string;
   currentSide: Side;
+  currentTurn: 'w' | 'b';
+  gameMode: GameMode;
+  gameStatus: GameStatus;
+
+  // AI
+  aiHints: AIHint[];
+  aiDepth: number;
+  isThinking: boolean;
+
+  // 交互
   selectedPos: Position | null;
   legalMoves: Position[];
-  moveHistory: HistoryEntry[];
-  aiHints: AIHint[];
-  isInCheckFlag: boolean;
-  isCheckmatedFlag: boolean;
 
-  /** 点击棋盘交叉点 */
+  // 历史
+  fenHistory: string[];
+  canUndo: boolean;
+
+  // 操作
+  setGameMode: (mode: GameMode) => void;
+  setAiDepth: (depth: number) => void;
+  setIsThinking: (v: boolean) => void;
   handleCellClick: (row: number, col: number) => void;
-  /** 撤销上一步 */
-  undoMove: () => void;
-  /** 重置为初始布局 */
-  resetGame: (fen?: string) => void;
-  /** 设置 AI 推荐走法 */
+  undoMove: (steps?: number) => void;
+  resetGame: () => void;
   setAIHints: (hints: AIHint[]) => void;
+
+  /** 供 useEffect 驱动的 AI 自动落子调用 */
+  executeMove: (from: Position, to: Position) => void;
 }
 
-export function useChessGame(initialFen?: string): UseChessGameReturn {
-  const startFen = initialFen || DEFAULT_FEN;
+// ─── 辅助 ─────────────────────────────────────────────────────────
+
+function deriveStatus(board: Board, side: Side): GameStatus {
+  if (isCheckmated(board, side)) return 'gameover';
+  if (isInCheck(board, side)) return 'check';
+  return 'playing';
+}
+
+function turnChar(side: Side): 'w' | 'b' {
+  return side === Side.Red ? 'w' : 'b';
+}
+
+function flipSide(side: Side): Side {
+  return side === Side.Red ? Side.Black : Side.Red;
+}
+
+// ─── Hook ─────────────────────────────────────────────────────────
+
+export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn {
+  const startFen = options?.initialFen || DEFAULT_FEN;
+
+  // ── 核心状态 ─────────────────────────────────────────────────
 
   const [{ board, side: currentSide }, setGameState] = useState(() => {
     const { board, sideToMove } = fenToBoard(startFen);
@@ -55,149 +90,233 @@ export function useChessGame(initialFen?: string): UseChessGameReturn {
   });
 
   const [fen, setFen] = useState(startFen);
+  const [fenHistory, setFenHistory] = useState<string[]>([startFen]);
+  const [gameMode, setGameModeState] = useState<GameMode>('practice');
+  const [gameStatus, setGameStatus] = useState<GameStatus>('playing');
+  const [aiDepth, setAiDepth] = useState(10);
+  const [isThinking, setIsThinking] = useState(false);
+
   const [selectedPos, setSelectedPos] = useState<Position | null>(null);
   const [legalMoves, setLegalMoves] = useState<Position[]>([]);
-  const [moveHistory, setMoveHistory] = useState<HistoryEntry[]>([]);
   const [aiHints, setAiHints] = useState<AIHint[]>([]);
 
-  const fenRef = useRef(startFen);
+  // Refs — 始终保持最新值，避免闭包过期
   const boardRef = useRef(board);
   const sideRef = useRef(currentSide);
+  const fenRef = useRef(fen);
+  const fenHistoryRef = useRef(fenHistory);
+  const gameModeRef = useRef(gameMode);
+  const gameStatusRef = useRef(gameStatus);
+  const isThinkingRef = useRef(isThinking);
 
   boardRef.current = board;
   sideRef.current = currentSide;
+  fenRef.current = fen;
+  fenHistoryRef.current = fenHistory;
+  gameModeRef.current = gameMode;
+  gameStatusRef.current = gameStatus;
+  isThinkingRef.current = isThinking;
 
-  // ── 将军 / 将死检测 ──────────────────────────────────────────
+  // ── 模式切换 (含重置) ─────────────────────────────────────────
 
-  const [isInCheckFlag, setIsInCheck] = useState(false);
-  const [isCheckmatedFlag, setIsCheckmated] = useState(false);
-
-  const updateCheckStatus = useCallback((b: Board, s: Side) => {
-    setIsInCheck(isInCheck(b, s));
-    setIsCheckmated(isCheckmated(b, s));
+  const setGameMode = useCallback((mode: GameMode) => {
+    console.log('[hook] 切换模式 →', mode);
+    setGameModeState(mode);
   }, []);
 
-  // ── 棋盘点击 ─────────────────────────────────────────────────
+  // ── 内部走子引擎 ─────────────────────────────────────────────
+
+  const applyMove = useCallback(
+    (from: Position, to: Position, b: Board, s: Side) => {
+      const newBoard = b.map((r) => [...r]);
+      const captured = newBoard[to.row][to.col];
+      newBoard[to.row][to.col] = newBoard[from.row][from.col];
+      newBoard[from.row][from.col] = null;
+
+      const nextSide = flipSide(s);
+      // ★ 关键：FEN 的 side-to-move 必须是"下一步该谁走"
+      const newFen = boardToFen(newBoard, nextSide);
+      const status = deriveStatus(newBoard, nextSide);
+
+      console.log(
+        `[hook] applyMove ${turnChar(s)}→${turnChar(nextSide)}  ` +
+        `from=(${from.row},${from.col}) to=(${to.row},${to.col})  ` +
+        `fen=${newFen}`
+      );
+
+      return { newBoard, nextSide, newFen, status, captured };
+    },
+    []
+  );
+
+  // ── executeMove: 供外部 (AI 自动落子 / 玩家走子) 调用 ─────────
+
+  const executeMove = useCallback(
+    (from: Position, to: Position) => {
+      const { newBoard, nextSide, newFen, status } = applyMove(
+        from, to,
+        boardRef.current,
+        sideRef.current
+      );
+
+      boardRef.current = newBoard;
+      sideRef.current = nextSide;
+      fenRef.current = newFen;
+
+      setGameState({ board: newBoard, side: nextSide });
+      setFen(newFen);
+      setFenHistory((prev) => [...prev, newFen]);
+      setGameStatus(status);
+      setSelectedPos(null);
+      setLegalMoves([]);
+      setAiHints([]);
+    },
+    [applyMove]
+  );
+
+  // ── handleCellClick: 玩家点击 ──────────────────────────────────
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
-      const clickedPiece = boardRef.current[row]?.[col] ?? null;
+      // ★ 锁: AI 思考中或游戏结束 → 直接拒绝
+      if (isThinkingRef.current) {
+        console.log('[hook] 点击被拦截: isThinking=true');
+        return;
+      }
+      if (gameStatusRef.current === 'gameover') return;
 
-      // 情况 A: 已选中棋子，且点击的是合法落点 → 执行走子
+      const currentBoard = boardRef.current;
+      const side = sideRef.current;
+      const clickedPiece = currentBoard[row]?.[col] ?? null;
+
+      // ★ 教练/对战模式下黑方由 AI 控制 → 拦截
+      if (
+        (gameModeRef.current === 'battle' ||
+          gameModeRef.current === 'coach') &&
+        side === Side.Black
+      ) {
+        console.log('[hook] 点击被拦截: 黑方由AI控制');
+        return;
+      }
+
+      // 已选中棋子 → 检查落点
       if (selectedPos) {
-        const isLegalTarget = legalMoves.some(
+        const isLegal = legalMoves.some(
           (m) => m.row === row && m.col === col
         );
 
-        if (isLegalTarget) {
-          // 执行走子
-          const captured = boardRef.current[row][col];
-          const prevFen = fenRef.current;
-
-          const newBoard = boardRef.current.map((r) => [...r]);
-          newBoard[row][col] = newBoard[selectedPos.row][selectedPos.col];
-          newBoard[selectedPos.row][selectedPos.col] = null;
-
-          const nextSide =
-            currentSide === Side.Red ? Side.Black : Side.Red;
-          const newFen = boardToFen(newBoard, nextSide);
-
-          boardRef.current = newBoard;
-          fenRef.current = newFen;
-
-          setGameState({ board: newBoard, side: nextSide });
-          setFen(newFen);
-          setSelectedPos(null);
-          setLegalMoves([]);
-          setMoveHistory((prev) => [
-            ...prev,
-            { from: selectedPos, to: { row, col }, captured, prevFen, prevSide: currentSide },
-          ]);
-          updateCheckStatus(newBoard, nextSide);
+        if (isLegal) {
+          executeMove(selectedPos, { row, col });
           return;
         }
 
         // 点击己方另一枚棋子 → 切换选中
-        if (clickedPiece && clickedPiece.side === currentSide) {
+        if (clickedPiece && clickedPiece.side === side) {
           setSelectedPos({ row, col });
-          setLegalMoves(getLegalMoves(boardRef.current, row, col));
+          setLegalMoves(getLegalMoves(currentBoard, row, col));
           return;
         }
 
-        // 其他情况 → 取消选中
+        // 取消选中
         setSelectedPos(null);
         setLegalMoves([]);
         return;
       }
 
-      // 情况 B: 未选中棋子，点击己方棋子 → 选中
-      if (clickedPiece && clickedPiece.side === currentSide) {
+      // 未选中 → 点击己方棋子则选中
+      if (clickedPiece && clickedPiece.side === side) {
         setSelectedPos({ row, col });
-        setLegalMoves(getLegalMoves(boardRef.current, row, col));
+        setLegalMoves(getLegalMoves(currentBoard, row, col));
       }
     },
-    [selectedPos, legalMoves, currentSide, updateCheckStatus]
+    [selectedPos, legalMoves, executeMove]
   );
 
-  // ── 撤销 ─────────────────────────────────────────────────────
+  // ── undoMove ────────────────────────────────────────────────────
 
-  const undoMove = useCallback(() => {
-    if (moveHistory.length === 0) return;
+  const undoMove = useCallback(
+    (steps: number = 1) => {
+      const history = fenHistoryRef.current;
+      if (history.length <= steps) return;
 
-    const last = moveHistory[moveHistory.length - 1];
-    const { board: prevBoard, sideToMove: prevSide } = fenToBoard(last.prevFen);
+      const newHistory = history.slice(0, -steps);
+      const restoreFen = newHistory[newHistory.length - 1];
 
-    boardRef.current = prevBoard;
-    fenRef.current = last.prevFen;
+      const { board: restoredBoard, sideToMove: restoredSide } =
+        fenToBoard(restoreFen);
 
-    setGameState({ board: prevBoard, side: prevSide });
-    setFen(last.prevFen);
-    setSelectedPos(null);
-    setLegalMoves([]);
-    setMoveHistory((prev) => prev.slice(0, -1));
-    updateCheckStatus(prevBoard, prevSide);
-  }, [moveHistory, updateCheckStatus]);
+      console.log(`[hook] 悔棋 ${steps} 步 → side=${turnChar(restoredSide)}`);
 
-  // ── 重置 ─────────────────────────────────────────────────────
+      boardRef.current = restoredBoard;
+      sideRef.current = restoredSide;
+      fenRef.current = restoreFen;
+      fenHistoryRef.current = newHistory;
 
-  const resetGame = useCallback(
-    (newFen?: string) => {
-      const f = newFen || startFen;
-      const { board: b, sideToMove: s } = fenToBoard(f);
-
-      boardRef.current = b;
-      fenRef.current = f;
-
-      setGameState({ board: b, side: s });
-      setFen(f);
+      setGameState({ board: restoredBoard, side: restoredSide });
+      setFen(restoreFen);
+      setFenHistory(newHistory);
+      setGameStatus(deriveStatus(restoredBoard, restoredSide));
       setSelectedPos(null);
       setLegalMoves([]);
-      setMoveHistory([]);
-      setIsInCheck(false);
-      setIsCheckmated(false);
+      setAiHints([]);
     },
-    [startFen]
+    []
   );
 
-  // ── AI 提示 ─────────────────────────────────────────────────
+  // ── resetGame ───────────────────────────────────────────────────
+
+  const resetGame = useCallback(() => {
+    const { board: b, sideToMove: s } = fenToBoard(startFen);
+
+    console.log('[hook] resetGame → side=', turnChar(s));
+
+    boardRef.current = b;
+    sideRef.current = s;
+    fenRef.current = startFen;
+
+    setGameState({ board: b, side: s });
+    setFen(startFen);
+    setFenHistory([startFen]);
+    setGameStatus('playing');
+    setSelectedPos(null);
+    setLegalMoves([]);
+    setAiHints([]);
+    setIsThinking(false);
+  }, [startFen]);
+
+  // ── AI 提示 ─────────────────────────────────────────────────────
 
   const setAIHints = useCallback((hints: AIHint[]) => {
     setAiHints(hints);
   }, []);
 
+  // ── canUndo ─────────────────────────────────────────────────────
+
+  const minHistory =
+    gameMode === 'battle' || gameMode === 'coach' ? 2 : 1;
+  const canUndo = fenHistory.length > minHistory;
+
   return {
     board,
     fen,
     currentSide,
+    currentTurn: turnChar(currentSide),
+    gameMode,
+    gameStatus,
+    aiHints,
+    aiDepth,
+    isThinking,
     selectedPos,
     legalMoves,
-    moveHistory,
-    aiHints,
-    isInCheckFlag,
-    isCheckmatedFlag,
+    fenHistory,
+    canUndo,
+    setGameMode,
+    setAiDepth,
+    setIsThinking,
     handleCellClick,
     undoMove,
     resetGame,
     setAIHints,
+    executeMove,
   };
 }
