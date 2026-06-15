@@ -1,6 +1,7 @@
 'use client';
 
 import type { GameStatus } from '@/hooks/useChessGame';
+import { audio } from '@/lib/audio';
 
 export interface ControlsPanelProps {
   // 难度
@@ -105,21 +106,21 @@ export default function ControlsPanel({
       {/* ── 操作按钮 ── */}
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={onUndo}
+          onClick={() => { audio.playUI(); onUndo(); }}
           disabled={!canUndo}
           className="rounded border border-gray-600 px-4 py-1.5 text-sm text-gray-300 transition hover:border-gray-400 hover:bg-gray-700 disabled:opacity-30"
         >
           悔棋
         </button>
         <button
-          onClick={onReset}
+          onClick={() => { audio.playUI(); onReset(); }}
           className="rounded border border-gray-600 px-4 py-1.5 text-sm text-gray-300 transition hover:border-gray-400 hover:bg-gray-700"
         >
           新局
         </button>
 
         <button
-          onClick={onAnalyze}
+          onClick={() => { audio.playUI(); onAnalyze(); }}
           disabled={aiThinking || !isElectron}
           className="rounded bg-amber-500 px-4 py-1.5 text-sm font-semibold text-gray-900 transition hover:bg-amber-400 disabled:opacity-50"
         >
@@ -136,7 +137,7 @@ export default function ControlsPanel({
 
         {/* 返回主菜单 (幽灵按钮) */}
         <button
-          onClick={onBackToHome}
+          onClick={() => { audio.playUI(); onBackToHome(); }}
           className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-slate-400 backdrop-blur-md transition-all duration-300 hover:border-slate-500/40 hover:bg-white/[0.08] hover:text-slate-200"
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Board, Piece, Position, Side } from '@/core/types';
 import { getLegalMoves, isInCheck, isGameOver } from '@/core/rules';
 import { fenToBoard, boardToFen } from '@/lib/fen';
+import { audio } from '@/lib/audio';
 
 const DEFAULT_FEN =
   'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
@@ -162,7 +163,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
 
   const executeMove = useCallback(
     (from: Position, to: Position) => {
-      const { newBoard, nextSide, newFen, status, result, inCheck } = applyMove(
+      const { newBoard, nextSide, newFen, status, result, inCheck, captured } = applyMove(
         from, to,
         boardRef.current,
         sideRef.current
@@ -179,6 +180,19 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       setSelectedPos(null);
       setLegalMoves([]);
       setAiHints([]);
+
+      // 音效反馈
+      if (captured) {
+        audio.playCapture();
+      } else {
+        audio.playMove();
+      }
+      if (inCheck) {
+        setTimeout(() => audio.playCheck(), 150); // 将军音效略延迟
+      }
+      if (result) {
+        setTimeout(() => audio.playGameOver(), 300); // 终局音效更后
+      }
 
       // 终局判定：绝杀/困毙 → 走子方获胜
       if (result) {

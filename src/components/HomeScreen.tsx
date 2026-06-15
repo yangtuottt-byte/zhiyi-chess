@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { GameMode } from '@/hooks/useChessGame';
+import { audio } from '@/lib/audio';
 
 export interface HomeScreenProps {
   onStartGame: (mode: GameMode, depth: number) => void;
@@ -93,7 +94,7 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
             return (
               <button
                 key={m.mode}
-                onClick={() => setSelected(m.mode)}
+                onClick={() => { audio.playUI(); setSelected(m.mode); }}
                 className={`group flex items-center gap-5 rounded-2xl border px-6 py-5 text-left transition-all duration-300 ease-out ${
                   isActive
                     ? 'border-amber-500/50 bg-amber-500/10 shadow-2xl shadow-amber-500/10 -translate-y-1'
@@ -158,7 +159,7 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
               {DEPTH_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
-                  onClick={() => setDepth(opt.value)}
+                  onClick={() => { audio.playUI(); setDepth(opt.value); }}
                   className={`rounded-lg px-5 py-2 text-sm font-medium transition-all duration-300 ${
                     depth === opt.value
                       ? 'bg-amber-500/20 text-amber-400 shadow-inner shadow-amber-500/10'
@@ -174,7 +175,7 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
 
         {/* ── 开始按钮 ── */}
         <button
-          onClick={() => onStartGame(selected, depth)}
+          onClick={() => { audio.playUI(); onStartGame(selected, depth); }}
           className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-14 py-4 text-lg font-bold tracking-wider text-slate-900 shadow-2xl shadow-amber-500/20 transition-all duration-300 ease-out hover:from-amber-400 hover:to-orange-500 hover:shadow-amber-500/40 active:scale-95"
         >
           {/* 按钮光泽扫过动画 */}
