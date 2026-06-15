@@ -1,87 +1,87 @@
 'use client';
 
 import React from 'react';
-import { Position, Piece, Side, PieceType } from '@/core/types';
+import { Position, Piece, Side } from '@/core/types';
 import { PIECE_CHAR } from '@/lib/fen';
-import { uciToPositions } from '@/lib/uci';
 
 // ─── 布局常量 ──────────────────────────────────────────────────────
 
-const CELL = 60;
-const PAD = 36;
-const BOARD_W = 8 * CELL + 2 * PAD;
-const BOARD_H = 9 * CELL + 2 * PAD;
-const PIECE_R = 22;
-const DOT_R = 6;
-const HINT_R = 20;
+const CELL = 60;       // 交叉点间距
+const PAD = 36;        // 棋盘边距
+const ROWS = 10;
+const COLS = 9;
+const BOARD_W = (COLS - 1) * CELL + 2 * PAD;
+const BOARD_H = (ROWS - 1) * CELL + 2 * PAD;
+const PIECE_R = 22;    // 棋子半径
+const DOT_R = 6;       // 合法落点绿点半径
+const HINT_R = 20;     // AI 提示方块半径
 
-/** 交叉点像素坐标 */
-function px(row: number, col: number): { x: number; y: number } {
+/** 交叉点棋盘坐标 → 像素坐标 */
+function pt(row: number, col: number) {
   return { x: PAD + col * CELL, y: PAD + row * CELL };
 }
 
-// ─── AI 提示颜色 ────────────────────────────────────────────────
+// ─── AI 提示颜色 ───────────────────────────────────────────────────
 
-const HINT_COLORS = [
-  { fill: 'rgba(34,197,94,0.25)', stroke: '#22c55e' },   // 最佳: 绿
-  { fill: 'rgba(234,179,8,0.25)', stroke: '#eab308' },    // 次选: 黄
-  { fill: 'rgba(249,115,22,0.22)', stroke: '#f97316' },   // 第三: 橙
+const HINT_STYLE = [
+  { fill: 'rgba(34,197,94,0.28)',  stroke: '#22c55e' }, // #1 绿
+  { fill: 'rgba(234,179,8,0.28)',  stroke: '#eab308' }, // #2 黄
+  { fill: 'rgba(249,115,22,0.25)', stroke: '#f97316' }, // #3 橙
 ];
 
-// ─── 棋子组件 ──────────────────────────────────────────────────────
+// ─── 棋子圆形 (纯展示，无定位) ─────────────────────────────────────
 
-function PieceView({ piece, row, col, isSelected }: {
-  piece: Piece;
-  row: number;
-  col: number;
-  isSelected: boolean;
-}) {
-  const { x, y } = px(row, col);
+function PieceCircle({ piece, isSelected }: { piece: Piece; isSelected: boolean }) {
   const isRed = piece.side === Side.Red;
 
   return (
     <div
-      className="absolute flex items-center justify-center rounded-full select-none"
+      className="flex items-center justify-center rounded-full select-none"
       style={{
-        left: x - PIECE_R,
-        top: y - PIECE_R,
         width: PIECE_R * 2,
         height: PIECE_R * 2,
-        cursor: 'pointer',
-        zIndex: 20,
         background: isRed
           ? 'radial-gradient(circle at 35% 35%, #fca5a5, #dc2626 60%, #991b1b)'
-          : 'radial-gradient(circle at 35% 35%, #4b5563, #1f2937 60%, #030712)',
+          : 'radial-gradient(circle at 35% 35%, #6b7280, #1f2937 60%, #030712)',
         border: isSelected
           ? '3px solid #fbbf24'
           : isRed
-            ? '2px solid #7f1d1d'
+            ? '2px solid #b91c1c'
             : '2px solid #111827',
         boxShadow: isSelected
-          ? '0 0 12px rgba(251,191,36,0.7), 0 2px 6px rgba(0,0,0,0.5)'
-          : '0 2px 4px rgba(0,0,0,0.4)',
+          ? '0 0 14px rgba(251,191,36,0.8), 0 2px 6px rgba(0,0,0,0.5)'
+          : '0 2px 6px rgba(0,0,0,0.45)',
         transition: 'box-shadow 0.15s, border 0.15s',
         fontSize: 22,
         fontWeight: 700,
-        color: isRed ? '#fef2f2' : '#f3f4f6',
-        fontFamily: "'KaiTi', 'STKaiti', '楷体', serif",
+        color: isRed ? '#fef2f2' : '#e5e7eb',
+        fontFamily: "'KaiTi','STKaiti','楷体',serif",
+        cursor: 'pointer',
       }}
     >
-      {PIECE_CHAR[piece.type][piece.side as Side]}
+      {PIECE_CHAR[piece.type][piece.side]}
     </div>
   );
 }
 
-// ─── 棋盘组件 ──────────────────────────────────────────────────────
+// ─── 公开接口 ──────────────────────────────────────────────────────
+
+export interface AIHintDisplay {
+  multipv: number;
+  from: Position;
+  to: Position;
+}
 
 export interface ChessboardProps {
   board: (Piece | null)[][];
   selectedPos: Position | null;
   legalMoves: Position[];
-  aiHints: { multipv: number; from: Position; to: Position }[];
+  aiHints: AIHintDisplay[];
   currentSide: Side;
   onCellClick: (row: number, col: number) => void;
 }
+
+// ─── 棋盘组件 ──────────────────────────────────────────────────────
 
 export default function Chessboard({
   board,
@@ -91,57 +91,53 @@ export default function Chessboard({
   currentSide,
   onCellClick,
 }: ChessboardProps) {
-  // 构建 legalMoves 集合用于快速查找
+  // 快速查找集合
   const legalSet = new Set(legalMoves.map((m) => `${m.row},${m.col}`));
 
-  // 构建 AI 提示集合：{ "fromRow,fromCol" → { to, multipv } }
-  const hintMap = new Map<string, { to: Position; multipv: number }>();
-  for (const h of aiHints) {
-    const key = `${h.from.row},${h.from.col}`;
-    if (!hintMap.has(key)) hintMap.set(key, { to: h.to, multipv: h.multipv });
-  }
-  const hintToSet = new Set(
-    aiHints.map((h) => `${h.to.row},${h.to.col}`)
-  );
-
   return (
-    <div className="relative inline-block select-none">
-      {/* ── SVG 网格层 ── */}
+    <div
+      className="relative select-none"
+      style={{ width: BOARD_W, height: BOARD_H }}
+    >
+      {/* ══════════════ Layer 1: SVG 网格 ══════════════ */}
       <svg
+        className="absolute inset-0"
         width={BOARD_W}
         height={BOARD_H}
-        className="block"
         viewBox={`0 0 ${BOARD_W} ${BOARD_H}`}
       >
-        {/* 棋盘背景 */}
+        {/* 背景 */}
         <rect x={0} y={0} width={BOARD_W} height={BOARD_H} rx={8} fill="#f5deb3" />
+
+        {/* 外框 */}
         <rect
           x={PAD - 2} y={PAD - 2}
-          width={8 * CELL + 4} height={9 * CELL + 4}
+          width={(COLS - 1) * CELL + 4}
+          height={(ROWS - 1) * CELL + 4}
           fill="none" stroke="#b45309" strokeWidth={3} rx={2}
         />
 
-        {/* 横线 ×10 */}
-        {Array.from({ length: 10 }, (_, r) => (
+        {/* 横线 */}
+        {Array.from({ length: ROWS }, (_, r) => (
           <line
-            key={`h-${r}`}
+            key={`h${r}`}
             x1={PAD} y1={PAD + r * CELL}
-            x2={PAD + 8 * CELL} y2={PAD + r * CELL}
+            x2={PAD + (COLS - 1) * CELL} y2={PAD + r * CELL}
             stroke="#8b4513" strokeWidth={1.2}
           />
         ))}
 
         {/* 竖线: 左右边界贯通，内部在楚河汉界处断开 */}
-        {[0, 8].map((c) => (
+        {[0, COLS - 1].map((c) => (
           <line
-            key={`v-${c}`}
+            key={`v${c}`}
             x1={PAD + c * CELL} y1={PAD}
-            x2={PAD + c * CELL} y2={PAD + 9 * CELL}
+            x2={PAD + c * CELL} y2={PAD + (ROWS - 1) * CELL}
             stroke="#8b4513" strokeWidth={1.2}
           />
         ))}
-        {[1, 2, 3, 4, 5, 6, 7].map((c) => (
-          <React.Fragment key={`v-${c}`}>
+        {Array.from({ length: COLS - 2 }, (_, i) => i + 1).map((c) => (
+          <React.Fragment key={`v${c}`}>
             <line
               x1={PAD + c * CELL} y1={PAD}
               x2={PAD + c * CELL} y2={PAD + 4 * CELL}
@@ -149,21 +145,19 @@ export default function Chessboard({
             />
             <line
               x1={PAD + c * CELL} y1={PAD + 5 * CELL}
-              x2={PAD + c * CELL} y2={PAD + 9 * CELL}
+              x2={PAD + c * CELL} y2={PAD + (ROWS - 1) * CELL}
               stroke="#8b4513" strokeWidth={1.2}
             />
           </React.Fragment>
         ))}
 
-        {/* 九宫格斜线 */}
+        {/* 九宫斜线 */}
         {[
-          [0, 3, 2, 5],
-          [0, 5, 2, 3],
-          [7, 3, 9, 5],
-          [7, 5, 9, 3],
+          [0, 3, 2, 5], [0, 5, 2, 3],
+          [7, 3, 9, 5], [7, 5, 9, 3],
         ].map(([r1, c1, r2, c2], i) => (
           <line
-            key={`pal-${i}`}
+            key={`pal${i}`}
             x1={PAD + c1 * CELL} y1={PAD + r1 * CELL}
             x2={PAD + c2 * CELL} y2={PAD + r2 * CELL}
             stroke="#8b4513" strokeWidth={0.8} strokeDasharray="4 3"
@@ -185,14 +179,13 @@ export default function Chessboard({
           楚河　　汉界
         </text>
 
-        {/* ── AI 提示箭头 (SVG 层) ── */}
+        {/* AI 提示箭头 */}
         {aiHints.map((hint, i) => {
-          const from = px(hint.from.row, hint.from.col);
-          const to = px(hint.to.row, hint.to.col);
-          const color = HINT_COLORS[Math.min(hint.multipv - 1, 2)];
-          const offset = 6 * hint.multipv; // 错开避免重叠
+          const from = pt(hint.from.row, hint.from.col);
+          const to = pt(hint.to.row, hint.to.col);
+          const style = HINT_STYLE[Math.min(hint.multipv - 1, 2)];
+          const offset = 6 * hint.multipv;
 
-          // 计算箭头方向
           const dx = to.x - from.x;
           const dy = to.y - from.y;
           const len = Math.sqrt(dx * dx + dy * dy);
@@ -200,74 +193,52 @@ export default function Chessboard({
 
           const ux = dx / len;
           const uy = dy / len;
-
-          // 从棋子边缘出发
           const sx = from.x + ux * (PIECE_R + 2);
           const sy = from.y + uy * (PIECE_R + 2);
           const ex = to.x - ux * (PIECE_R + 2);
           const ey = to.y - uy * (PIECE_R + 2);
-
-          // 垂直方向偏移
-          const px2 = -uy * offset;
-          const py2 = ux * offset;
+          const px = -uy * offset;
+          const py = ux * offset;
 
           return (
-            <g key={`hint-arrow-${i}`}>
-              <line
-                x1={sx + px2} y1={sy + py2}
-                x2={ex + px2} y2={ey + py2}
-                stroke={color.stroke}
-                strokeWidth={3}
-                strokeOpacity={0.7}
-                markerEnd={`url(#arrow-${hint.multipv})`}
-              />
-            </g>
+            <line
+              key={`arrow-${i}`}
+              x1={sx + px} y1={sy + py}
+              x2={ex + px} y2={ey + py}
+              stroke={style.stroke}
+              strokeWidth={2.5}
+              strokeOpacity={0.7}
+            />
           );
         })}
-
-        {/* 箭头标记定义 */}
-        <defs>
-          {[1, 2, 3].map((n) => (
-            <marker
-              key={`arrow-marker-${n}`}
-              id={`arrow-${n}`}
-              viewBox="0 0 10 10"
-              refX={8} refY={5}
-              markerWidth={6} markerHeight={6}
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={HINT_COLORS[n - 1].stroke} />
-            </marker>
-          ))}
-        </defs>
       </svg>
 
-      {/* ── AI 提示高亮块 ── */}
+      {/* ══════════════ Layer 2: AI 提示方块 ══════════════ */}
       {aiHints.map((hint, i) => {
-        const color = HINT_COLORS[Math.min(hint.multipv - 1, 2)];
+        const style = HINT_STYLE[Math.min(hint.multipv - 1, 2)];
         return (
           <React.Fragment key={`hint-${i}`}>
             <div
               className="absolute rounded-lg pointer-events-none"
               style={{
-                left: px(hint.from.row, hint.from.col).x - HINT_R,
-                top: px(hint.from.row, hint.from.col).y - HINT_R,
+                left: pt(hint.from.row, hint.from.col).x - HINT_R,
+                top: pt(hint.from.row, hint.from.col).y - HINT_R,
                 width: HINT_R * 2,
                 height: HINT_R * 2,
-                backgroundColor: color.fill,
-                border: `1.5px solid ${color.stroke}`,
+                backgroundColor: style.fill,
+                border: `1.5px solid ${style.stroke}`,
                 zIndex: 5,
               }}
             />
             <div
               className="absolute rounded-lg pointer-events-none"
               style={{
-                left: px(hint.to.row, hint.to.col).x - HINT_R,
-                top: px(hint.to.row, hint.to.col).y - HINT_R,
+                left: pt(hint.to.row, hint.to.col).x - HINT_R,
+                top: pt(hint.to.row, hint.to.col).y - HINT_R,
                 width: HINT_R * 2,
                 height: HINT_R * 2,
-                backgroundColor: color.fill,
-                border: `1.5px solid ${color.stroke}`,
+                backgroundColor: style.fill,
+                border: `1.5px solid ${style.stroke}`,
                 zIndex: 5,
               }}
             />
@@ -275,60 +246,68 @@ export default function Chessboard({
         );
       })}
 
-      {/* ── 合法落点指示器 (绿点) ── */}
+      {/* ══════════════ Layer 3: 合法落点指示 ══════════════ */}
       {legalMoves.map((m) => {
-        const { x, y } = px(m.row, m.col);
-        const hasPiece = board[m.row]?.[m.col] !== null;
+        const { x, y } = pt(m.row, m.col);
+        const occupied = board[m.row]?.[m.col] !== null;
         return (
           <div
             key={`legal-${m.row}-${m.col}`}
             className="absolute rounded-full pointer-events-none"
             style={{
-              left: x - (hasPiece ? PIECE_R + 2 : DOT_R),
-              top: y - (hasPiece ? PIECE_R + 2 : DOT_R),
-              width: hasPiece ? (PIECE_R + 2) * 2 : DOT_R * 2,
-              height: hasPiece ? (PIECE_R + 2) * 2 : DOT_R * 2,
-              backgroundColor: hasPiece ? 'transparent' : 'rgba(34,197,94,0.65)',
-              border: hasPiece ? '2.5px solid rgba(239,68,68,0.7)' : 'none',
-              borderRadius: hasPiece ? '50%' : '50%',
+              left: x - (occupied ? PIECE_R + 2 : DOT_R),
+              top: y - (occupied ? PIECE_R + 2 : DOT_R),
+              width: occupied ? (PIECE_R + 2) * 2 : DOT_R * 2,
+              height: occupied ? (PIECE_R + 2) * 2 : DOT_R * 2,
+              backgroundColor: occupied ? 'transparent' : 'rgba(34,197,94,0.65)',
+              border: occupied ? '2.5px solid rgba(34,197,94,0.75)' : 'none',
               zIndex: 10,
             }}
           />
         );
       })}
 
-      {/* ── 点击热区 + 棋子 ── */}
-      {board.map((row, r) =>
-        row.map((piece, c) => {
-          const { x, y } = px(r, c);
-          const isSelected =
-            selectedPos?.row === r && selectedPos?.col === c;
+      {/* ══════════════ Layer 4: 棋子 + 点击 ══════════════
+          每个交叉点仅一个绝对定位容器。
+          棋子 PieceCircle 不再做二次定位，避免坐标翻倍。 */}
+      {Array.from({ length: ROWS }, (_, r) =>
+        Array.from({ length: COLS }, (_, c) => {
+          const { x, y } = pt(r, c);
+          const piece = board[r]?.[c] ?? null;
+          const isSel = selectedPos?.row === r && selectedPos?.col === c;
+          const isLegal = legalSet.has(`${r},${c}`);
 
           return (
             <div
               key={`cell-${r}-${c}`}
-              className="absolute"
+              className="absolute flex items-center justify-center"
               style={{
                 left: x - PIECE_R,
                 top: y - PIECE_R,
                 width: PIECE_R * 2,
                 height: PIECE_R * 2,
-                zIndex: piece ? 21 : 15,
-                cursor: piece ? 'pointer' : (legalSet.has(`${r},${c}`) ? 'pointer' : 'default'),
+                zIndex: piece ? 21 : 12,
+                cursor: piece || isLegal ? 'pointer' : 'default',
               }}
               onClick={() => onCellClick(r, c)}
             >
-              {piece && (
-                <PieceView piece={piece} row={r} col={c} isSelected={isSelected} />
+              {piece ? (
+                <PieceCircle piece={piece} isSelected={isSel} />
+              ) : (
+                /* 空交叉点的隐形点击区域 */
+                <div
+                  className="rounded-full"
+                  style={{ width: PIECE_R * 2, height: PIECE_R * 2 }}
+                />
               )}
             </div>
           );
         })
       )}
 
-      {/* ── 行棋方指示 ── */}
-      <div className="absolute top-1 right-2 text-xs font-bold text-amber-800/70 z-30">
-        {currentSide === Side.Red ? '红方行棋' : '黑方行棋'}
+      {/* ══════════════ 行棋方标签 ══════════════ */}
+      <div className="absolute top-1 right-2 text-xs font-bold text-amber-800/70 z-30 pointer-events-none">
+        {currentSide === Side.Red ? '红方走' : '黑方走'}
       </div>
     </div>
   );
