@@ -1,199 +1,209 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { Side } from '@/core/types';
+import { useChessGame } from '@/hooks/useChessGame';
 import { useElectron } from '@/hooks/useElectron';
-
-const DEFAULT_FEN =
-  'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
+import { uciToPositions } from '@/lib/uci';
+import Chessboard from '@/components/Chessboard';
 
 export default function Home() {
-  const { mounted, isElectron, envChecked, analyzePosition, getEngineStatus } =
+  const { isElectron, envChecked, analyzePosition, getEngineStatus } =
     useElectron();
 
-  const [fen, setFen] = useState(DEFAULT_FEN);
-  const [result, setResult] = useState<any>(null);
+  const {
+    board,
+    fen,
+    currentSide,
+    selectedPos,
+    legalMoves,
+    moveHistory,
+    aiHints,
+    isInCheckFlag,
+    isCheckmatedFlag,
+    handleCellClick,
+    undoMove,
+    resetGame,
+    setAIHints,
+  } = useChessGame();
+
+  // ── 引擎状态 ─────────────────────────────────────────────────
+
+  const [engineStatus, setEngineStatus] = useState('检测中...');
   const [loading, setLoading] = useState(false);
-  const [engineStatus, setEngineStatus] = useState<string>('检测中...');
   const [error, setError] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<any>(null);
 
-  // 客户端挂载 + 环境检查完成后，尝试获取引擎状态
   useEffect(() => {
-    if (!mounted || !envChecked) return;
-
+    if (!envChecked) return;
     if (!isElectron) {
-      setEngineStatus('浏览器模式 (请使用 npm run electron:dev 启动)');
+      setEngineStatus('浏览器模式');
       return;
     }
-
     getEngineStatus()
-      .then((s) => setEngineStatus(s.ready ? '就绪' : `未就绪 (${s.enginePath})`))
+      .then((s) => setEngineStatus(s.ready ? '引擎就绪' : '引擎未就绪'))
       .catch((e) => setEngineStatus('检查失败: ' + e.message));
-  }, [mounted, envChecked, isElectron, getEngineStatus]);
+  }, [envChecked, isElectron, getEngineStatus]);
 
-  const checkStatus = useCallback(async () => {
-    console.log('[page] 刷新按钮被点击');
-    setError(null);
-    try {
-      const status = await getEngineStatus();
-      setEngineStatus(status.ready ? '就绪' : `未就绪 (${status.enginePath})`);
-    } catch (e: any) {
-      setEngineStatus('检查失败: ' + e.message);
-      setError(e.message);
-    }
-  }, [getEngineStatus]);
+  // ── AI 分析 ─────────────────────────────────────────────────
 
   const analyze = useCallback(async () => {
-    console.log('[page] AI分析按钮被点击, fen:', fen.substring(0, 30));
+    console.log('[page] AI分析, FEN:', fen);
     setLoading(true);
     setError(null);
-    setResult(null);
+    setAiResult(null);
 
     try {
       const res = await analyzePosition(fen);
-      console.log('[page] AI分析结果:', res);
-      setResult(res);
+      setAiResult(res);
+
+      // 将引擎返回的 PV 解析为棋盘上的 from/to 提示
+      const hints = res.moves.map((m: any) => {
+        const parsed = uciToPositions(m.pv[0]);
+        return {
+          multipv: m.multipv,
+          from: parsed?.from ?? { row: 0, col: 0 },
+          to: parsed?.to ?? { row: 0, col: 0 },
+          score: m.score,
+          depth: m.depth,
+          pv: m.pv,
+        };
+      });
+
+      setAIHints(hints);
+      console.log('[page] AI 提示已设置:', hints);
     } catch (e: any) {
-      console.error('[page] AI分析失败:', e);
       setError(e.message);
+      console.error('[page] AI分析失败:', e);
     } finally {
       setLoading(false);
     }
-  }, [fen, analyzePosition]);
+  }, [fen, analyzePosition, setAIHints]);
 
-  const handleModeClick = useCallback((mode: string) => {
-    console.log(`[page] ${mode}按钮被点击 (功能开发中)`);
-    setError(`${mode}功能将在后续版本中实现`);
-  }, []);
+  // ── 清除 AI 提示 ────────────────────────────────────────────
+
+  const clearHints = useCallback(() => {
+    setAIHints([]);
+    setAiResult(null);
+  }, [setAIHints]);
+
+  // ── 渲染 ─────────────────────────────────────────────────────
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-8">
-      <h1 className="text-4xl font-bold text-amber-400 drop-shadow-lg">
-        欢迎来到AI象棋教练
-      </h1>
-      <p className="text-gray-400">练习模式 · AI教学 · 人机对战</p>
-
-      {/* ── 环境指示 ── */}
-      <div className="rounded bg-gray-800/60 px-3 py-1 text-xs text-gray-500">
-        运行环境: {!envChecked ? '检测中...' : isElectron ? 'Electron' : '浏览器'}
-        {mounted ? ' (已挂载)' : ' (挂载中)'}
-      </div>
-
-      {/* ── 引擎状态栏 ── */}
-      <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-2">
-        <span className="text-sm text-gray-500">引擎状态:</span>
-        <span
-          className={`text-sm font-semibold ${
-            engineStatus.includes('就绪')
-              ? 'text-green-400'
-              : 'text-yellow-400'
-          }`}
-        >
-          {engineStatus}
+    <main className="flex min-h-screen flex-col items-center gap-4 px-4 py-6">
+      {/* 标题栏 */}
+      <div className="flex items-center gap-4">
+        <h1 className="text-2xl font-bold text-amber-400">AI象棋教练</h1>
+        <span className="text-xs text-gray-500">
+          {isElectron ? 'Electron' : 'Browser'}
         </span>
-        <button
-          onClick={checkStatus}
-          className="rounded border border-gray-600 px-2 py-0.5 text-xs text-gray-400 transition-colors hover:border-gray-500 hover:bg-gray-700 hover:text-gray-200 active:scale-95"
-        >
-          刷新
-        </button>
       </div>
 
-      {/* ── FEN 输入区 ── */}
-      <div className="w-full max-w-2xl">
-        <label className="mb-1 block text-sm text-gray-500">FEN 字符串</label>
-        <textarea
-          className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 font-mono text-sm text-gray-300 focus:border-amber-500 focus:outline-none"
-          rows={2}
-          value={fen}
-          onChange={(e) => setFen(e.target.value)}
+      {/* 状态行 */}
+      <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
+        <span className="text-gray-500">
+          引擎: <span className={engineStatus.includes('就绪') ? 'text-green-400' : 'text-yellow-400'}>{engineStatus}</span>
+        </span>
+        <span className="text-gray-500">
+          当前: <span className={currentSide === Side.Red ? 'text-red-400' : 'text-gray-300 font-bold'}>
+            {currentSide === Side.Red ? '红方' : '黑方'}
+          </span>
+        </span>
+        {isInCheckFlag && (
+          <span className="text-red-400 font-bold animate-pulse">将军!</span>
+        )}
+        {isCheckmatedFlag && (
+          <span className="text-red-500 font-bold text-lg">将死!</span>
+        )}
+        {moveHistory.length > 0 && (
+          <span className="text-gray-600">步数: {moveHistory.length}</span>
+        )}
+      </div>
+
+      {/* 棋盘 */}
+      <div className="rounded-xl bg-amber-950/30 p-3 shadow-2xl">
+        <Chessboard
+          board={board}
+          selectedPos={selectedPos}
+          legalMoves={legalMoves}
+          aiHints={aiHints}
+          currentSide={currentSide}
+          onCellClick={handleCellClick}
         />
       </div>
 
-      {/* ── 操作按钮 ── */}
-      <div className="flex gap-4">
+      {/* 控制按钮 */}
+      <div className="flex gap-3">
+        <button
+          onClick={undoMove}
+          disabled={moveHistory.length === 0}
+          className="rounded-lg border border-gray-600 px-4 py-2 text-sm text-gray-300 transition-all hover:bg-gray-700 disabled:opacity-30"
+        >
+          悔棋
+        </button>
+        <button
+          onClick={() => resetGame()}
+          className="rounded-lg border border-gray-600 px-4 py-2 text-sm text-gray-300 transition-all hover:bg-gray-700"
+        >
+          新局
+        </button>
         <button
           onClick={analyze}
-          disabled={loading}
-          className="rounded-lg bg-amber-500 px-6 py-2 font-semibold text-gray-900 shadow-lg transition-all hover:bg-amber-400 hover:shadow-xl active:scale-95 disabled:cursor-wait disabled:opacity-60"
+          disabled={loading || !isElectron}
+          className="rounded-lg bg-amber-500 px-6 py-2 text-sm font-semibold text-gray-900 transition-all hover:bg-amber-400 disabled:opacity-50"
         >
           {loading ? '分析中...' : 'AI 分析'}
         </button>
-        <button
-          onClick={() => handleModeClick('AI教学')}
-          className="rounded-lg border border-amber-500/40 px-6 py-2 font-semibold text-amber-400 shadow-lg transition-all hover:bg-amber-500/10 hover:shadow-xl active:scale-95"
-        >
-          AI教学
-        </button>
-        <button
-          onClick={() => handleModeClick('人机对战')}
-          className="rounded-lg border border-amber-500/40 px-6 py-2 font-semibold text-amber-400 shadow-lg transition-all hover:bg-amber-500/10 hover:shadow-xl active:scale-95"
-        >
-          人机对战
-        </button>
+        {aiHints.length > 0 && (
+          <button
+            onClick={clearHints}
+            className="rounded-lg border border-gray-500 px-3 py-2 text-xs text-gray-400 hover:bg-gray-700"
+          >
+            清除提示
+          </button>
+        )}
       </div>
 
-      {/* ── 错误提示 ── */}
+      {/* 错误提示 */}
       {error && (
-        <div className="w-full max-w-2xl rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-3 text-sm text-red-400">
+        <div className="w-full max-w-xl rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-2 text-sm text-red-400">
           {error}
         </div>
       )}
 
-      {/* ── 分析结果展示 ── */}
-      {result && (
-        <div className="w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-900/60 p-4">
-          <h2 className="mb-2 text-sm font-bold text-gray-300">
-            分析结果 (红方视角，depth={result.moves[0]?.depth})
-          </h2>
-          <div className="space-y-2">
-            {result.moves.map((m: any) => (
+      {/* AI 分析结果 */}
+      {aiResult && (
+        <div className="w-full max-w-xl rounded-lg border border-gray-700 bg-gray-900/60 p-3 text-xs">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-bold text-gray-300">
+              AI 推荐 (depth={aiResult.moves[0]?.depth})
+            </span>
+            <span className="text-gray-600">红方视角分数</span>
+          </div>
+          <div className="space-y-1.5">
+            {aiResult.moves.map((m: any) => (
               <div
                 key={m.multipv}
-                className={`rounded border px-3 py-2 font-mono text-sm ${
-                  m.multipv === 1
-                    ? 'border-amber-500/30 bg-amber-500/5'
-                    : 'border-gray-700 bg-gray-800/30'
-                }`}
+                className="flex items-center gap-3 rounded border border-gray-700/50 px-2 py-1 font-mono"
               >
-                <div className="flex items-center gap-3 text-xs text-gray-500">
-                  <span className="font-bold text-amber-400">#{m.multipv}</span>
-                  <span>
-                    分数:{' '}
-                    <span
-                      className={
-                        m.score > 0
-                          ? 'text-green-400'
-                          : m.score < 0
-                            ? 'text-red-400'
-                            : 'text-gray-400'
-                      }
-                    >
-                      {m.score > 0 ? '+' : ''}
-                      {m.score}
-                    </span>
-                  </span>
-                  <span>depth={m.depth}</span>
-                </div>
-                <div className="mt-1 text-gray-300">
-                  PV: {m.pv.join(' ')}
-                </div>
+                <span className="font-bold text-amber-400">#{m.multipv}</span>
+                <span className={m.score > 0 ? 'text-green-400' : m.score < 0 ? 'text-red-400' : 'text-gray-400'}>
+                  {m.score > 0 ? '+' : ''}{m.score}
+                </span>
+                <span className="text-gray-300">{m.pv.slice(0, 4).join(' ')}</span>
               </div>
             ))}
           </div>
-          <details className="mt-3">
-            <summary className="cursor-pointer text-xs text-gray-600">
-              原始 JSON
-            </summary>
-            <pre className="mt-1 max-h-40 overflow-auto rounded bg-gray-950 p-2 text-xs text-gray-500">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          </details>
         </div>
       )}
 
-      <p className="text-xs text-gray-700 mt-4">
-        Electron + Next.js + Tailwind CSS + UCI Engine
-      </p>
+      {/* FEN 调试 */}
+      <details className="w-full max-w-xl">
+        <summary className="cursor-pointer text-xs text-gray-600">FEN 字符串</summary>
+        <code className="mt-1 block break-all rounded bg-gray-900 px-3 py-2 text-xs text-gray-500">
+          {fen}
+        </code>
+      </details>
     </main>
   );
 }
