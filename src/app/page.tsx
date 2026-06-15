@@ -1,44 +1,69 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useElectron } from '@/hooks/useElectron';
 
-/** 初始 FEN — 标准中国象棋开局 */
 const DEFAULT_FEN =
   'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
 
 export default function Home() {
+  const { mounted, isElectron, envChecked, analyzePosition, getEngineStatus } =
+    useElectron();
+
   const [fen, setFen] = useState(DEFAULT_FEN);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [engineStatus, setEngineStatus] = useState<string>('未知');
+  const [engineStatus, setEngineStatus] = useState<string>('检测中...');
   const [error, setError] = useState<string | null>(null);
 
+  // 客户端挂载 + 环境检查完成后，尝试获取引擎状态
+  useEffect(() => {
+    if (!mounted || !envChecked) return;
+
+    if (!isElectron) {
+      setEngineStatus('浏览器模式 (请使用 npm run electron:dev 启动)');
+      return;
+    }
+
+    getEngineStatus()
+      .then((s) => setEngineStatus(s.ready ? '就绪' : `未就绪 (${s.enginePath})`))
+      .catch((e) => setEngineStatus('检查失败: ' + e.message));
+  }, [mounted, envChecked, isElectron, getEngineStatus]);
+
   const checkStatus = useCallback(async () => {
+    console.log('[page] 刷新按钮被点击');
+    setError(null);
     try {
-      const status = await window.api.getEngineStatus();
+      const status = await getEngineStatus();
       setEngineStatus(status.ready ? '就绪' : `未就绪 (${status.enginePath})`);
-      setError(null);
     } catch (e: any) {
       setEngineStatus('检查失败: ' + e.message);
+      setError(e.message);
     }
-  }, []);
+  }, [getEngineStatus]);
 
   const analyze = useCallback(async () => {
+    console.log('[page] AI分析按钮被点击, fen:', fen.substring(0, 30));
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const res = await window.api.analyzePosition(fen);
+      const res = await analyzePosition(fen);
+      console.log('[page] AI分析结果:', res);
       setResult(res);
-      console.log('[AI 分析结果]', JSON.stringify(res, null, 2));
     } catch (e: any) {
+      console.error('[page] AI分析失败:', e);
       setError(e.message);
-      console.error('[AI 分析失败]', e);
     } finally {
       setLoading(false);
     }
-  }, [fen]);
+  }, [fen, analyzePosition]);
+
+  const handleModeClick = useCallback((mode: string) => {
+    console.log(`[page] ${mode}按钮被点击 (功能开发中)`);
+    setError(`${mode}功能将在后续版本中实现`);
+  }, []);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-8">
@@ -47,19 +72,27 @@ export default function Home() {
       </h1>
       <p className="text-gray-400">练习模式 · AI教学 · 人机对战</p>
 
+      {/* ── 环境指示 ── */}
+      <div className="rounded bg-gray-800/60 px-3 py-1 text-xs text-gray-500">
+        运行环境: {!envChecked ? '检测中...' : isElectron ? 'Electron' : '浏览器'}
+        {mounted ? ' (已挂载)' : ' (挂载中)'}
+      </div>
+
       {/* ── 引擎状态栏 ── */}
       <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-2">
         <span className="text-sm text-gray-500">引擎状态:</span>
         <span
           className={`text-sm font-semibold ${
-            engineStatus === '就绪' ? 'text-green-400' : 'text-yellow-400'
+            engineStatus.includes('就绪')
+              ? 'text-green-400'
+              : 'text-yellow-400'
           }`}
         >
           {engineStatus}
         </span>
         <button
           onClick={checkStatus}
-          className="rounded border border-gray-600 px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-700"
+          className="rounded border border-gray-600 px-2 py-0.5 text-xs text-gray-400 transition-colors hover:border-gray-500 hover:bg-gray-700 hover:text-gray-200 active:scale-95"
         >
           刷新
         </button>
@@ -81,14 +114,20 @@ export default function Home() {
         <button
           onClick={analyze}
           disabled={loading}
-          className="rounded-lg bg-amber-500 px-6 py-2 font-semibold text-gray-900 transition-all hover:bg-amber-400 disabled:opacity-50"
+          className="rounded-lg bg-amber-500 px-6 py-2 font-semibold text-gray-900 shadow-lg transition-all hover:bg-amber-400 hover:shadow-xl active:scale-95 disabled:cursor-wait disabled:opacity-60"
         >
           {loading ? '分析中...' : 'AI 分析'}
         </button>
-        <button className="rounded-lg border border-amber-500/40 px-6 py-2 font-semibold text-amber-400 transition-all hover:bg-amber-500/10">
+        <button
+          onClick={() => handleModeClick('AI教学')}
+          className="rounded-lg border border-amber-500/40 px-6 py-2 font-semibold text-amber-400 shadow-lg transition-all hover:bg-amber-500/10 hover:shadow-xl active:scale-95"
+        >
           AI教学
         </button>
-        <button className="rounded-lg border border-amber-500/40 px-6 py-2 font-semibold text-amber-400 transition-all hover:bg-amber-500/10">
+        <button
+          onClick={() => handleModeClick('人机对战')}
+          className="rounded-lg border border-amber-500/40 px-6 py-2 font-semibold text-amber-400 shadow-lg transition-all hover:bg-amber-500/10 hover:shadow-xl active:scale-95"
+        >
           人机对战
         </button>
       </div>
