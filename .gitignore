@@ -7,7 +7,16 @@ node_modules/
 .next/
 out/
 
-# electron
+# electron main process compiled output
+main-dist/
+
+# UCI engine binaries (download separately)
+engine/**/*.exe
+engine/**/*.nnue
+engine/**/pikafish-*
+engine/**/*pikafish*
+
+# electron build
 dist/
 
 # production
