@@ -9,6 +9,7 @@ import { boardToFen } from '@/lib/fen';
 import { Side } from '@/core/types';
 import Chessboard from '@/components/Chessboard';
 import ControlsPanel from '@/components/ControlsPanel';
+import GameOverModal from '@/components/GameOverModal';
 
 /** AI 请求超时 (毫秒) */
 const AI_TIMEOUT_MS = 12_000;
@@ -81,6 +82,7 @@ export default function Home() {
     if (game.gameMode === 'practice') return;
     if (game.currentTurn !== 'b') return;
     if (game.gameStatus !== 'playing') return;
+    if (game.winner) return;                     // 游戏已结束
     if (!isElectron) return;
     if (autoMoveGuard.current) return;
 
@@ -142,6 +144,7 @@ export default function Home() {
     if (game.gameMode !== 'coach') return;
     if (game.currentTurn !== 'w') return;
     if (game.gameStatus !== 'playing') return;
+    if (game.winner) return;                     // 游戏已结束
     if (!isElectron) return;
     if (coachHintGuard.current) return;
     if (game.fen === lastCoachFenRef.current) return;
@@ -330,6 +333,21 @@ export default function Home() {
           onCellClick={game.handleCellClick}
           boardLocked={boardLocked}
         />
+
+        {/* 终局弹窗 */}
+        {game.winner && (
+          <GameOverModal
+            winner={game.winner}
+            reason={
+              game.gameStatus === 'gameover'
+                ? game.checkSide
+                  ? `绝杀！${game.checkSide === 'w' ? '红方' : '黑方'}无路可逃`
+                  : '困毙！无子可走'
+                : '对局结束'
+            }
+            onNewGame={handleReset}
+          />
+        )}
       </div>
 
       <ControlsPanel
@@ -340,6 +358,7 @@ export default function Home() {
         engineStatus={engineStatus}
         currentTurn={game.currentTurn}
         gameStatus={game.gameStatus}
+        checkSide={game.checkSide}
         moveCount={game.fenHistory.length - 1}
         onUndo={handleUndo}
         onReset={handleReset}

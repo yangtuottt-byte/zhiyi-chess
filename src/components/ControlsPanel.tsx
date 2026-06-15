@@ -16,6 +16,7 @@ export interface ControlsPanelProps {
   engineStatus: string;
   currentTurn: 'w' | 'b';
   gameStatus: GameStatus;
+  checkSide: 'w' | 'b' | null;
   moveCount: number;
 
   // 操作
@@ -63,7 +64,7 @@ const DEPTH_OPTIONS = [
 export default function ControlsPanel({
   gameMode, onSetGameMode,
   aiDepth, onSetAiDepth,
-  engineStatus, currentTurn, gameStatus, moveCount,
+  engineStatus, currentTurn, gameStatus, checkSide, moveCount,
   onUndo, onReset, canUndo,
   onAnalyze, onClearHints, aiThinking, hasHints, isElectron,
   aiResult, error,
@@ -121,11 +122,13 @@ export default function ControlsPanel({
         {aiThinking && (
           <span className="text-amber-400 font-bold animate-pulse">AI 思考中...</span>
         )}
-        {gameStatus === 'check' && (
-          <span className="text-red-400 font-bold animate-pulse">将军!</span>
+        {checkSide && (
+          <span className="text-red-400 font-bold animate-pulse">
+            将军! ({checkSide === 'w' ? '红方' : '黑方'}被将)
+          </span>
         )}
         {gameStatus === 'gameover' && (
-          <span className="text-red-500 font-bold">将死 — 游戏结束</span>
+          <span className="text-red-500 font-bold">对局结束</span>
         )}
         <span className="text-gray-600">步数: {moveCount}</span>
       </div>

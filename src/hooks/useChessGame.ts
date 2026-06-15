@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { Board, Piece, Position, Side } from '@/core/types';
-import { getLegalMoves, isInCheck, isCheckmated } from '@/core/rules';
+import { getLegalMoves, isInCheck, isGameOver } from '@/core/rules';
 import { fenToBoard, boardToFen } from '@/lib/fen';
 
 const DEFAULT_FEN =
@@ -34,6 +34,8 @@ export interface UseChessGameReturn {
   currentTurn: 'w' | 'b';
   gameMode: GameMode;
   gameStatus: GameStatus;
+  checkSide: 'w' | 'b' | null;  // 哪方被将军
+  winner: 'w' | 'b' | null;     // 胜方
 
   // AI
   aiHints: AIHint[];
@@ -64,7 +66,8 @@ export interface UseChessGameReturn {
 // ─── 辅助 ─────────────────────────────────────────────────────────
 
 function deriveStatus(board: Board, side: Side): GameStatus {
-  if (isCheckmated(board, side)) return 'gameover';
+  const over = isGameOver(board, side);
+  if (over) return 'gameover';
   if (isInCheck(board, side)) return 'check';
   return 'playing';
 }
@@ -95,6 +98,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   const [gameStatus, setGameStatus] = useState<GameStatus>('playing');
   const [aiDepth, setAiDepth] = useState(10);
   const [isThinking, setIsThinking] = useState(false);
+  const [checkSide, setCheckSide] = useState<'w' | 'b' | null>(null);
+  const [winner, setWinner] = useState<'w' | 'b' | null>(null);
 
   const [selectedPos, setSelectedPos] = useState<Position | null>(null);
   const [legalMoves, setLegalMoves] = useState<Position[]>([]);
@@ -108,6 +113,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   const gameModeRef = useRef(gameMode);
   const gameStatusRef = useRef(gameStatus);
   const isThinkingRef = useRef(isThinking);
+  const winnerRef = useRef(winner);
 
   boardRef.current = board;
   sideRef.current = currentSide;
@@ -116,6 +122,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   gameModeRef.current = gameMode;
   gameStatusRef.current = gameStatus;
   isThinkingRef.current = isThinking;
+  winnerRef.current = winner;
 
   // ── 模式切换 (含重置) ─────────────────────────────────────────
 
@@ -137,14 +144,16 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       // ★ 关键：FEN 的 side-to-move 必须是"下一步该谁走"
       const newFen = boardToFen(newBoard, nextSide);
       const status = deriveStatus(newBoard, nextSide);
+      const result = isGameOver(newBoard, nextSide); // 终局检测
+      const inCheck = isInCheck(newBoard, nextSide); // 将军检测
 
       console.log(
         `[hook] applyMove ${turnChar(s)}→${turnChar(nextSide)}  ` +
         `from=(${from.row},${from.col}) to=(${to.row},${to.col})  ` +
-        `fen=${newFen}`
+        `status=${status} result=${result ?? 'none'}  fen=${newFen}`
       );
 
-      return { newBoard, nextSide, newFen, status, captured };
+      return { newBoard, nextSide, newFen, status, captured, result, inCheck };
     },
     []
   );
@@ -153,7 +162,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
 
   const executeMove = useCallback(
     (from: Position, to: Position) => {
-      const { newBoard, nextSide, newFen, status } = applyMove(
+      const { newBoard, nextSide, newFen, status, result, inCheck } = applyMove(
         from, to,
         boardRef.current,
         sideRef.current
@@ -170,6 +179,13 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       setSelectedPos(null);
       setLegalMoves([]);
       setAiHints([]);
+
+      // 终局判定：绝杀/困毙 → 走子方获胜
+      if (result) {
+        setWinner(turnChar(flipSide(nextSide)));
+      }
+      // 将军状态（不受终局影响，始终更新）
+      setCheckSide(inCheck ? turnChar(nextSide) : null);
     },
     [applyMove]
   );
@@ -259,6 +275,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       setSelectedPos(null);
       setLegalMoves([]);
       setAiHints([]);
+      setCheckSide(null);
+      setWinner(null);
     },
     []
   );
@@ -282,6 +300,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setLegalMoves([]);
     setAiHints([]);
     setIsThinking(false);
+    setCheckSide(null);
+    setWinner(null);
   }, [startFen]);
 
   // ── AI 提示 ─────────────────────────────────────────────────────
@@ -303,6 +323,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     currentTurn: turnChar(currentSide),
     gameMode,
     gameStatus,
+    checkSide,
+    winner,
     aiHints,
     aiDepth,
     isThinking,

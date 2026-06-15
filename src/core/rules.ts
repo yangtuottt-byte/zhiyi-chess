@@ -322,17 +322,21 @@ function simulateMove(board: Board, from: Position, to: Position): Board {
 /**
  * 获取指定坐标棋子的所有合法落点。
  * 输入当前棋盘、指定坐标，返回所有合法目标坐标数组。
+ *
+ * ★ 安全模拟：走子后己方不能被将军。
+ * 涵盖 将帅照面、牵制（pin）、捉双等所有违规情况。
  */
 export function getLegalMoves(board: Board, row: number, col: number): Position[] {
   const piece: Piece | null = board[row]?.[col] ?? null;
   if (!piece) return [];
 
-  const candidates = getCandidateMoves(board, { row, col }, piece.side, piece.type);
+  const side = piece.side;
+  const candidates = getCandidateMoves(board, { row, col }, side, piece.type);
 
-  // 将帅照面过滤：走子后不能导致己方被照面
+  // 对每个候选落点，模拟走子后检查己方是否被将军
   return candidates.filter(target => {
     const nextBoard = simulateMove(board, { row, col }, target);
-    return !isFlyingGeneral(nextBoard);
+    return !isInCheck(nextBoard, side);
   });
 }
 
@@ -387,6 +391,9 @@ export function isInCheck(board: Board, side: Side): boolean {
     }
   }
 
+  // 另需检测 将帅照面 (飞公): 双王同列无阻挡
+  if (isFlyingGeneral(board)) return true;
+
   return false;
 }
 
@@ -395,6 +402,20 @@ export function isInCheck(board: Board, side: Side): boolean {
  */
 export function isCheckmated(board: Board, side: Side): boolean {
   return getAllLegalMoves(board, side).length === 0;
+}
+
+/**
+ * 终局判定。
+ * @returns 'checkmate' = 绝杀 | 'stalemate' = 困毙 | false = 对局继续
+ *
+ * 在中国象棋中，绝杀和困毙均判负（无合法走法的一方输）。
+ */
+export function isGameOver(board: Board, side: Side): 'checkmate' | 'stalemate' | false {
+  const hasLegalMoves = getAllLegalMoves(board, side).length > 0;
+  if (hasLegalMoves) return false;
+
+  if (isInCheck(board, side)) return 'checkmate';
+  return 'stalemate';
 }
 
 /**
