@@ -1,0 +1,30 @@
+{
+  "name": "ai-chess-coach",
+  "version": "1.0.0",
+  "description": "AI教练版象棋游戏 - 桌面端单机应用",
+  "main": "main/main.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "electron:dev": "concurrently -k \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "next build && electron-builder"
+  },
+  "dependencies": {
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "concurrently": "^8.2.2",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.0",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.4.0",
+    "wait-on": "^7.2.0"
+  }
+}
