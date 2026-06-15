@@ -134,11 +134,14 @@ export default function ControlsPanel({
           </button>
         )}
 
-        {/* 返回主菜单 */}
+        {/* 返回主菜单 (幽灵按钮) */}
         <button
           onClick={onBackToHome}
-          className="ml-auto rounded border border-gray-500/50 px-4 py-1.5 text-sm text-gray-400 transition hover:border-gray-400 hover:text-gray-200"
+          className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-slate-400 backdrop-blur-md transition-all duration-300 hover:border-slate-500/40 hover:bg-white/[0.08] hover:text-slate-200"
         >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
           返回主菜单
         </button>
       </div>
