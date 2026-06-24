@@ -14,6 +14,18 @@ const DEFAULT_FEN =
 export type GameMode = 'practice' | 'coach' | 'battle';
 export type GameStatus = 'playing' | 'check' | 'gameover';
 export type Winner = 'w' | 'b' | 'draw';
+export type AIDifficulty = 'easy' | 'medium' | 'hard';
+
+export interface UCIOptions {
+  depth: number;
+  movetime: number;
+}
+
+export const DIFFICULTY_CONFIG: Record<AIDifficulty, UCIOptions> = {
+  easy: { depth: 2, movetime: 1000 },
+  medium: { depth: 4, movetime: 1000 },
+  hard: { depth: 8, movetime: 3000 },
+};
 
 export interface AIHint {
   multipv: number;
@@ -33,7 +45,7 @@ export interface RestoreData {
   fenHistory: string[];
   gameMode: GameMode;
   playerSide: Side;
-  aiDepth: number;
+  aiDifficulty: AIDifficulty;
 }
 
 export interface MoveRecord {
@@ -58,7 +70,7 @@ export interface UseChessGameReturn {
 
   // AI
   aiHints: AIHint[];
-  aiDepth: number;
+  aiDifficulty: AIDifficulty;
   isThinking: boolean;
 
   // 交互
@@ -81,7 +93,7 @@ export interface UseChessGameReturn {
 
   // 操作
   setGameMode: (mode: GameMode) => void;
-  setAiDepth: (depth: number) => void;
+  setAiDifficulty: (d: AIDifficulty) => void;
   setIsThinking: (v: boolean) => void;
   setPlayerSide: (side: Side) => void;
   handleCellClick: (row: number, col: number) => void;
@@ -133,7 +145,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   const [fenHistory, setFenHistory] = useState<string[]>([startFen]);
   const [gameMode, setGameModeState] = useState<GameMode>('practice');
   const [gameStatus, setGameStatus] = useState<GameStatus>('playing');
-  const [aiDepth, setAiDepth] = useState(10);
+  const [aiDifficulty, setAiDifficultyState] = useState<AIDifficulty>('medium');
   const [isThinking, setIsThinking] = useState(false);
   const [checkSide, setCheckSide] = useState<'w' | 'b' | null>(null);
   const [winner, setWinner] = useState<Winner | null>(null);
@@ -179,6 +191,11 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   const setGameMode = useCallback((mode: GameMode) => {
     console.log('[hook] 切换模式 →', mode);
     setGameModeState(mode);
+  }, []);
+
+  const setAiDifficulty = useCallback((d: AIDifficulty) => {
+    console.log('[hook] AI 难度 →', d, DIFFICULTY_CONFIG[d]);
+    setAiDifficultyState(d);
   }, []);
 
   // ── 阵营设置 ─────────────────────────────────────────────────
@@ -517,7 +534,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setCurrentMoveIndex(lastIdx);
     setGameModeState(data.gameMode);
     setPlayerSideState(data.playerSide);
-    setAiDepth(data.aiDepth);
+    setAiDifficultyState(data.aiDifficulty);
     setGameStatus(deriveStatus(restoredBoard, restoredSide));
     setSelectedPos(null);
     setLegalMoves([]);
@@ -553,7 +570,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     playerSide,
     boardFlipped: playerSide === Side.Black,
     aiHints,
-    aiDepth,
+    aiDifficulty,
     isThinking,
     selectedPos,
     legalMoves,
@@ -568,7 +585,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     goToEnd,
     jumpToMove,
     setGameMode,
-    setAiDepth,
+    setAiDifficulty,
     setIsThinking,
     setPlayerSide,
     handleCellClick,

@@ -1,4 +1,4 @@
-import type { GameMode } from '@/hooks/useChessGame';
+import type { GameMode, AIDifficulty } from '@/hooks/useChessGame';
 import { Side } from '@/core/types';
 
 const STORAGE_KEY = 'ZhiYi_Save_Slots';
@@ -12,7 +12,7 @@ export interface SaveSlot {
   currentTurn: 'w' | 'b';
   gameMode: GameMode;
   playerSide: Side;
-  aiDepth: number;
+  aiDifficulty: AIDifficulty;
 }
 
 /** 从 localStorage 读取全部存档（按时间倒序） */

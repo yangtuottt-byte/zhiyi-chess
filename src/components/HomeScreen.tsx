@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import type { GameMode } from '@/hooks/useChessGame';
+import type { GameMode, AIDifficulty } from '@/hooks/useChessGame';
+import { DIFFICULTY_CONFIG } from '@/hooks/useChessGame';
 import { Side } from '@/core/types';
 import { audio } from '@/lib/audio';
 
 export interface HomeScreenProps {
-  onStartGame: (mode: GameMode, depth: number, playerSide: Side) => void;
+  onStartGame: (mode: GameMode, difficulty: AIDifficulty, playerSide: Side) => void;
 }
 
 interface ModeCard {
@@ -41,32 +42,39 @@ const MODES: ModeCard[] = [
   },
 ];
 
-const DEPTH_OPTIONS = [
-  { label: '简单', value: 5 },
-  { label: '中等', value: 10 },
-  { label: '困难', value: 15 },
+const DIFFICULTY_OPTIONS: Array<{
+  key: AIDifficulty;
+  label: string;
+  desc: string;
+  icon: string;
+  color: string;
+}> = [
+  { key: 'easy', label: '简单', desc: '新手入门，快速响应', icon: '🌱', color: 'emerald' },
+  { key: 'medium', label: '中等', desc: '业余水平，旗鼓相当', icon: '⚔️', color: 'amber' },
+  { key: 'hard', label: '困难', desc: '深度思考，挑战极限', icon: '👑', color: 'red' },
 ];
 
 export default function HomeScreen({ onStartGame }: HomeScreenProps) {
   const [selected, setSelected] = useState<GameMode>('practice');
-  const [depth, setDepth] = useState(10);
-  const [showSideModal, setShowSideModal] = useState(false);
+  const [difficulty, setDifficulty] = useState<AIDifficulty>('medium');
+  const [playerSide, setPlayerSide] = useState<Side>(Side.Red);
+  const [showSetupModal, setShowSetupModal] = useState(false);
 
   const currentMode = MODES.find((m) => m.mode === selected)!;
 
   const handleStartClick = () => {
     audio.playUI();
     if (currentMode.needsAI) {
-      setShowSideModal(true);
+      setShowSetupModal(true);
     } else {
-      onStartGame(selected, depth, Side.Red);
+      onStartGame(selected, 'medium', Side.Red);
     }
   };
 
-  const handleSideSelect = (side: Side) => {
+  const handleConfirmSetup = () => {
     audio.playUI();
-    setShowSideModal(false);
-    onStartGame(selected, depth, side);
+    setShowSetupModal(false);
+    onStartGame(selected, difficulty, playerSide);
   };
 
   return (
@@ -163,30 +171,6 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
           })}
         </div>
 
-        {/* ── 难度选择 ── */}
-        {currentMode.needsAI && (
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium tracking-wide text-slate-500">
-              AI 难度
-            </span>
-            <div className="flex rounded-xl border border-white/10 bg-white/5 p-1 backdrop-blur-md">
-              {DEPTH_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => { audio.playUI(); setDepth(opt.value); }}
-                  className={`rounded-lg px-5 py-2 text-sm font-medium transition-all duration-300 ${
-                    depth === opt.value
-                      ? 'bg-amber-500/20 text-amber-400 shadow-inner shadow-amber-500/10'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* ── 开始按钮 ── */}
         <button
           onClick={handleStartClick}
@@ -197,51 +181,152 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
         </button>
       </div>
 
-      {/* ══════════════ 阵营选择模态框 ══════════════ */}
-      {showSideModal && (
+      {/* ══════════════ 开局设置模态框 (难度 + 阵营) ══════════════ */}
+      {showSetupModal && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowSideModal(false)}
+          onClick={() => setShowSetupModal(false)}
         >
           <div
-            className="flex flex-col items-center gap-6 rounded-2xl bg-gray-900/95 px-10 py-8 shadow-2xl ring-1 ring-gray-700"
+            className="flex max-h-[85vh] flex-col gap-6 overflow-y-auto rounded-2xl bg-gray-900/95 px-10 py-8 shadow-2xl ring-1 ring-gray-700"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-xl font-bold text-amber-400">选择阵营</h2>
-            <p className="text-sm text-slate-400 -mt-3">
-              {selected === 'coach' ? 'AI 教学' : '人机对战'} — 请选择你的阵营
+            <h2 className="text-xl font-bold text-amber-400 text-center shrink-0">
+              对局设置
+            </h2>
+            <p className="text-sm text-slate-400 text-center -mt-4">
+              {selected === 'coach' ? 'AI 教学' : '人机对战'} — 配置难度与阵营
             </p>
 
-            <div className="flex gap-4">
-              <button
-                onClick={() => handleSideSelect(Side.Red)}
-                className="group flex flex-col items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-8 py-5 transition-all duration-300 hover:border-red-400/60 hover:bg-red-500/20 hover:-translate-y-1 hover:shadow-xl hover:shadow-red-500/10"
-              >
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-900/50 text-3xl font-bold text-red-400 ring-2 ring-red-500/50">
-                  帅
-                </div>
-                <span className="text-sm font-semibold text-red-300">我方执红</span>
-                <span className="text-xs text-slate-500">先手 · 标准视角</span>
-              </button>
+            {/* ── 难度选择 ── */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                AI 难度
+              </h3>
+              <div className="grid grid-cols-3 gap-3">
+                {DIFFICULTY_OPTIONS.map((opt) => {
+                  const isActive = difficulty === opt.key;
+                  const config = DIFFICULTY_CONFIG[opt.key];
+                  const borders: Record<string, string> = {
+                    emerald: 'border-emerald-500/30 hover:border-emerald-400/60',
+                    amber: 'border-amber-500/30 hover:border-amber-400/60',
+                    red: 'border-red-500/30 hover:border-red-400/60',
+                  };
+                  const bgs: Record<string, string> = {
+                    emerald: 'bg-emerald-500/10 hover:bg-emerald-500/20',
+                    amber: 'bg-amber-500/10 hover:bg-amber-500/20',
+                    red: 'bg-red-500/10 hover:bg-red-500/20',
+                  };
+                  const highlights: Record<string, string> = {
+                    emerald: 'border-emerald-500/60 bg-emerald-500/20 ring-1 ring-emerald-500/30',
+                    amber: 'border-amber-500/60 bg-amber-500/20 ring-1 ring-amber-500/30',
+                    red: 'border-red-500/60 bg-red-500/20 ring-1 ring-red-500/30',
+                  };
+                  const texts: Record<string, string> = {
+                    emerald: 'text-emerald-400',
+                    amber: 'text-amber-400',
+                    red: 'text-red-400',
+                  };
+                  const labels: Record<string, string> = {
+                    emerald: 'text-emerald-300',
+                    amber: 'text-amber-300',
+                    red: 'text-red-300',
+                  };
 
-              <button
-                onClick={() => handleSideSelect(Side.Black)}
-                className="group flex flex-col items-center gap-3 rounded-xl border border-gray-500/30 bg-gray-500/10 px-8 py-5 transition-all duration-300 hover:border-gray-400/60 hover:bg-gray-500/20 hover:-translate-y-1 hover:shadow-xl hover:shadow-gray-500/10"
-              >
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-800 text-3xl font-bold text-gray-300 ring-2 ring-gray-500/50">
-                  将
-                </div>
-                <span className="text-sm font-semibold text-gray-300">我方执黑</span>
-                <span className="text-xs text-slate-500">后手 · 翻转视角</span>
-              </button>
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => { audio.playUI(); setDifficulty(opt.key); }}
+                      className={`flex flex-col items-center gap-2 rounded-xl border px-4 py-4 transition-all duration-300 ${
+                        isActive
+                          ? `${highlights[opt.color]} -translate-y-1`
+                          : `${borders[opt.color]} ${bgs[opt.color]}`
+                      }`}
+                    >
+                      <span className="text-2xl">{opt.icon}</span>
+                      <span className={`text-sm font-bold ${isActive ? texts[opt.color] : 'text-slate-400'}`}>
+                        {opt.label}
+                      </span>
+                      <span className="text-[10px] text-slate-500 leading-tight text-center">
+                        {opt.desc}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-600">
+                        depth={config.depth} / {config.movetime}ms
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <button
-              onClick={() => setShowSideModal(false)}
-              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-            >
-              取消
-            </button>
+            {/* ── 分隔 ── */}
+            <div className="border-t border-gray-800" />
+
+            {/* ── 阵营选择 ── */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                我方阵营
+              </h3>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { audio.playUI(); setPlayerSide(Side.Red); }}
+                  className={`group flex flex-1 flex-col items-center gap-2 rounded-xl border px-6 py-4 transition-all duration-300 ${
+                    playerSide === Side.Red
+                      ? 'border-red-500/60 bg-red-500/20 ring-1 ring-red-500/30 -translate-y-1'
+                      : 'border-red-500/20 bg-red-500/5 hover:border-red-500/40 hover:bg-red-500/10'
+                  }`}
+                >
+                  <div className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl font-bold transition-all ${
+                    playerSide === Side.Red
+                      ? 'bg-red-900/60 text-red-400 ring-2 ring-red-500'
+                      : 'bg-red-900/30 text-red-400/60'
+                  }`}>
+                    帅
+                  </div>
+                  <span className={`text-sm font-semibold ${playerSide === Side.Red ? 'text-red-300' : 'text-slate-400'}`}>
+                    我方执红
+                  </span>
+                  <span className="text-[10px] text-slate-500">先手 · 标准视角</span>
+                </button>
+
+                <button
+                  onClick={() => { audio.playUI(); setPlayerSide(Side.Black); }}
+                  className={`group flex flex-1 flex-col items-center gap-2 rounded-xl border px-6 py-4 transition-all duration-300 ${
+                    playerSide === Side.Black
+                      ? 'border-gray-500/60 bg-gray-500/20 ring-1 ring-gray-500/30 -translate-y-1'
+                      : 'border-gray-500/20 bg-gray-500/5 hover:border-gray-500/40 hover:bg-gray-500/10'
+                  }`}
+                >
+                  <div className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl font-bold transition-all ${
+                    playerSide === Side.Black
+                      ? 'bg-gray-800 text-gray-300 ring-2 ring-gray-500'
+                      : 'bg-gray-800/60 text-gray-400'
+                  }`}>
+                    将
+                  </div>
+                  <span className={`text-sm font-semibold ${playerSide === Side.Black ? 'text-gray-300' : 'text-slate-400'}`}>
+                    我方执黑
+                  </span>
+                  <span className="text-[10px] text-slate-500">后手 · 翻转视角</span>
+                </button>
+              </div>
+            </div>
+
+            {/* ── 操作按钮 ── */}
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                onClick={() => setShowSetupModal(false)}
+                className="rounded-lg border border-gray-600 px-5 py-2 text-sm text-slate-400 transition hover:border-gray-400 hover:text-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmSetup}
+                className="rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-8 py-2 text-sm font-semibold text-gray-900 transition hover:from-amber-400 hover:to-orange-500 active:scale-95"
+              >
+                开始对局
+              </button>
+            </div>
           </div>
         </div>
       )}

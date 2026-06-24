@@ -6,7 +6,7 @@
 
 interface Window {
   api: {
-    analyzePosition(fen: string): Promise<{
+    analyzePosition(fen: string, options?: { depth?: number; movetime?: number }): Promise<{
       fen: string;
       sideToMove: 'w' | 'b';
       moves: Array<{

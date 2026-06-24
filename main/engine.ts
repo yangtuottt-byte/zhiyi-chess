@@ -131,12 +131,14 @@ export class UCIEngine extends EventEmitter {
   }
 
   /** 分析指定 FEN 局面，返回前 N 个候选走法 */
-  async analyze(fen: string): Promise<AnalysisResult> {
+  async analyze(
+    fen: string,
+    options?: { depth?: number; movetime?: number }
+  ): Promise<AnalysisResult> {
     if (!this.isReady || !this.process) {
       throw new Error('引擎尚未就绪');
     }
 
-    // 防御：同一时间只能跑一次分析
     if (this.pendingResolve) {
       throw new Error('引擎正在分析中，请等待当前分析完成');
     }
@@ -148,7 +150,15 @@ export class UCIEngine extends EventEmitter {
       this.infoMap.clear();
 
       this.send(`position fen ${fen}`);
-      this.send('go depth 15');
+
+      // 动态构建 go 指令
+      const depth = options?.depth ?? 10;
+      let goCmd = `go depth ${depth}`;
+      if (options?.movetime && options.movetime > 0) {
+        goCmd += ` movetime ${options.movetime}`;
+      }
+      console.log(`[engine] UCI 指令: ${goCmd}`);
+      this.send(goCmd);
     });
   }
 

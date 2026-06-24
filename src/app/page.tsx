@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useChessGame, turnChar } from '@/hooks/useChessGame';
-import type { GameMode } from '@/hooks/useChessGame';
+import { useChessGame, turnChar, DIFFICULTY_CONFIG } from '@/hooks/useChessGame';
+import type { GameMode, AIDifficulty } from '@/hooks/useChessGame';
 import { useElectron } from '@/hooks/useElectron';
 import { useSaveManager } from '@/hooks/useSaveManager';
 import { uciToPositions } from '@/lib/uci';
@@ -62,6 +62,7 @@ export default function Home() {
   const resignedRef = useRef(false);
 
   const playerTurnChar = turnChar(game.playerSide);
+  const uciOpts = DIFFICULTY_CONFIG[game.aiDifficulty];
   const boardLocked =
     (game.gameMode !== 'practice' && game.currentTurn !== playerTurnChar) || game.isThinking;
 
@@ -98,7 +99,7 @@ export default function Home() {
         console.log('📡 [AI Auto-Move] 发起请求  FEN:', syncedFen);
 
         const result = await Promise.race([
-          analyzePosition(syncedFen),
+          analyzePosition(syncedFen, uciOpts),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('引擎响应超时')), AI_TIMEOUT_MS)
           ),
@@ -162,7 +163,7 @@ export default function Home() {
     const timer = setTimeout(async () => {
       try {
         const result = await Promise.race([
-          analyzePosition(syncedFen),
+          analyzePosition(syncedFen, uciOpts),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('引擎响应超时')), AI_TIMEOUT_MS)
           ),
@@ -215,7 +216,7 @@ export default function Home() {
     setError(null); game.setIsThinking(true);
     try {
       const result = await Promise.race([
-        analyzePosition(syncedFen),
+        analyzePosition(syncedFen, uciOpts),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('引擎响应超时')), AI_TIMEOUT_MS)
         ),
@@ -244,8 +245,8 @@ export default function Home() {
   // ── 开始游戏 (从 HomeScreen 进入) ────────────────────────────
 
   const handleStartGame = useCallback(
-    (mode: GameMode, depth: number, playerSide: Side) => {
-      console.log('[page] 开始游戏  mode:', mode, 'depth:', depth, 'playerSide:', playerSide);
+    (mode: GameMode, difficulty: AIDifficulty, playerSide: Side) => {
+      console.log('[page] 开始游戏  mode:', mode, 'difficulty:', difficulty, 'playerSide:', playerSide);
       autoMoveGuard.current = false;
       coachHintGuard.current = false;
       lastCoachFenRef.current = '';
@@ -254,7 +255,7 @@ export default function Home() {
       setError(null);
       game.setPlayerSide(playerSide);
       game.setGameMode(mode);
-      game.setAiDepth(depth);
+      game.setAiDifficulty(difficulty);
       game.resetGame();
       setCurrentView('game');
     },
@@ -327,7 +328,7 @@ export default function Home() {
       currentTurn: game.currentTurn,
       gameMode: game.gameMode,
       playerSide: game.playerSide,
-      aiDepth: game.aiDepth,
+      aiDifficulty: game.aiDifficulty,
     };
     saveManager.addSlot(slot);
     saveManager.closeSaveModal();
@@ -340,7 +341,7 @@ export default function Home() {
       fenHistory: slot.fenHistory,
       gameMode: slot.gameMode,
       playerSide: slot.playerSide,
-      aiDepth: slot.aiDepth,
+      aiDifficulty: slot.aiDifficulty,
     });
     autoMoveGuard.current = false;
     coachHintGuard.current = false;
@@ -430,8 +431,8 @@ export default function Home() {
 
       <ControlsPanel
         gameMode={game.gameMode}
-        aiDepth={game.aiDepth}
-        onSetAiDepth={game.setAiDepth}
+        aiDifficulty={game.aiDifficulty}
+        onSetAiDifficulty={game.setAiDifficulty}
         engineStatus={engineStatus}
         currentTurn={game.currentTurn}
         gameStatus={game.gameStatus}

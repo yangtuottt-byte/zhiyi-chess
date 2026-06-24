@@ -18,7 +18,6 @@ export function useElectron() {
   useEffect(() => {
     setMounted(true);
 
-    // 立即检查一次
     if (typeof window !== 'undefined' && window.api) {
       console.log('[useElectron] window.api 已就绪');
       setIsElectron(true);
@@ -46,12 +45,15 @@ export function useElectron() {
   }, []);
 
   /** 每次调用时实时检查 window.api，不走缓存 ref */
-  const analyzePosition = useCallback(async (fen: string) => {
+  const analyzePosition = useCallback(async (
+    fen: string,
+    options?: { depth?: number; movetime?: number }
+  ) => {
     if (typeof window === 'undefined' || !window.api) {
       throw new Error('不在 Electron 环境中 — 请通过 electron:dev 启动');
     }
-    console.log('[useElectron] → analyzePosition 已发送 IPC');
-    return window.api.analyzePosition(fen);
+    console.log('[useElectron] → analyzePosition 已发送 IPC  options:', options);
+    return window.api.analyzePosition(fen, options);
   }, []);
 
   const getEngineStatus = useCallback(async () => {

@@ -1,6 +1,7 @@
 'use client';
 
-import type { GameMode, GameStatus } from '@/hooks/useChessGame';
+import type { GameMode, GameStatus, AIDifficulty } from '@/hooks/useChessGame';
+import { DIFFICULTY_CONFIG } from '@/hooks/useChessGame';
 import { audio } from '@/lib/audio';
 
 export interface ControlsPanelProps {
@@ -8,8 +9,8 @@ export interface ControlsPanelProps {
   gameMode: GameMode;
 
   // 难度
-  aiDepth: number;
-  onSetAiDepth: (depth: number) => void;
+  aiDifficulty: AIDifficulty;
+  onSetAiDifficulty: (d: AIDifficulty) => void;
 
   // 状态
   engineStatus: string;
@@ -51,15 +52,15 @@ export interface ControlsPanelProps {
   onLoad: () => void;
 }
 
-const DEPTH_OPTIONS = [
-  { label: '简单', value: 5 },
-  { label: '中等', value: 10 },
-  { label: '困难', value: 15 },
+const DIFFICULTY_LABELS: Array<{ key: AIDifficulty; label: string }> = [
+  { key: 'easy', label: '简单' },
+  { key: 'medium', label: '中等' },
+  { key: 'hard', label: '困难' },
 ];
 
 export default function ControlsPanel({
   gameMode,
-  aiDepth, onSetAiDepth,
+  aiDifficulty, onSetAiDifficulty,
   engineStatus, currentTurn, gameStatus, checkSide, moveCount,
   onUndo, onReset, onBackToHome, canUndo,
   onAnalyze, onClearHints, aiThinking, hasHints, isElectron,
@@ -104,12 +105,12 @@ export default function ControlsPanel({
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">AI 难度:</span>
           <div className="flex rounded border border-gray-700 bg-gray-800/50 p-0.5">
-            {DEPTH_OPTIONS.map((opt) => (
+            {DIFFICULTY_LABELS.map((opt) => (
               <button
-                key={opt.value}
-                onClick={() => onSetAiDepth(opt.value)}
+                key={opt.key}
+                onClick={() => onSetAiDifficulty(opt.key)}
                 className={`rounded px-3 py-1 text-xs transition ${
-                  aiDepth === opt.value
+                  aiDifficulty === opt.key
                     ? 'bg-amber-500/20 text-amber-400'
                     : 'text-gray-500 hover:text-gray-300'
                 }`}

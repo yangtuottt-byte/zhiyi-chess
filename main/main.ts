@@ -70,13 +70,13 @@ function registerIPC(): void {
    * 前端调用: window.api.analyzePosition(fen)
    * 返回: AnalysisResult (top 3 候选步 + 评分)
    */
-  ipcMain.handle('analyze-position', async (_event, fen: string) => {
+  ipcMain.handle('analyze-position', async (_event, fen: string, options?: { depth?: number; movetime?: number }) => {
     if (!engine) {
       throw new Error('引擎未就绪 — 请确认引擎文件存在于 engine/ 目录');
     }
 
     try {
-      const result = await engine.analyze(fen);
+      const result = await engine.analyze(fen, options);
       return result;
     } catch (err: any) {
       console.error('[main] 分析失败:', err.message);
