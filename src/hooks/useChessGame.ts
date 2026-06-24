@@ -9,8 +9,6 @@ import { audio } from '@/lib/audio';
 const DEFAULT_FEN =
   'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
 
-const SAVE_KEY = 'zhiyi_saved_game';
-
 // ─── 类型 ─────────────────────────────────────────────────────────
 
 export type GameMode = 'practice' | 'coach' | 'battle';
@@ -30,13 +28,12 @@ export interface UseChessGameOptions {
   initialFen?: string;
 }
 
-export interface SavedGameData {
+export interface RestoreData {
   fen: string;
   fenHistory: string[];
   gameMode: GameMode;
   playerSide: Side;
   aiDepth: number;
-  savedAt: string;
 }
 
 export interface UseChessGameReturn {
@@ -81,10 +78,8 @@ export interface UseChessGameReturn {
   resign: () => void;
   offerDraw: () => boolean;
 
-  // 存档
-  saveGame: () => void;
-  loadGame: () => boolean;
-  hasSavedGame: () => boolean;
+  // 存档恢复
+  restoreFromSave: (data: RestoreData) => void;
 
   /** 供 useEffect 驱动的 AI 自动落子调用 */
   executeMove: (from: Position, to: Position) => void;
@@ -378,61 +373,31 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     return accepted;
   }, []);
 
-  // ── 存档 ──────────────────────────────────────────────────────
+  // ── 存档恢复 ──────────────────────────────────────────────────
 
-  const saveGame = useCallback(() => {
-    const data: SavedGameData = {
-      fen: fenRef.current,
-      fenHistory: fenHistoryRef.current,
-      gameMode: gameModeRef.current,
-      playerSide: playerSideRef.current,
-      aiDepth: aiDepth,
-      savedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    console.log('[hook] 存档成功');
-  }, [aiDepth]);
+  const restoreFromSave = useCallback((data: RestoreData) => {
+    const { board: restoredBoard, sideToMove: restoredSide } = fenToBoard(data.fen);
 
-  const loadGame = useCallback((): boolean => {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) {
-      console.log('[hook] 无存档');
-      return false;
-    }
-    try {
-      const data: SavedGameData = JSON.parse(raw);
-      const { board: restoredBoard, sideToMove: restoredSide } = fenToBoard(data.fen);
+    console.log('[hook] 读档恢复 → side=', turnChar(restoredSide));
 
-      console.log('[hook] 读档 → side=', turnChar(restoredSide));
+    boardRef.current = restoredBoard;
+    sideRef.current = restoredSide;
+    fenRef.current = data.fen;
+    fenHistoryRef.current = data.fenHistory;
 
-      boardRef.current = restoredBoard;
-      sideRef.current = restoredSide;
-      fenRef.current = data.fen;
-      fenHistoryRef.current = data.fenHistory;
-
-      setGameState({ board: restoredBoard, side: restoredSide });
-      setFen(data.fen);
-      setFenHistory(data.fenHistory);
-      setGameModeState(data.gameMode);
-      setPlayerSideState(data.playerSide);
-      setAiDepth(data.aiDepth);
-      setGameStatus(deriveStatus(restoredBoard, restoredSide));
-      setSelectedPos(null);
-      setLegalMoves([]);
-      setAiHints([]);
-      setIsThinking(false);
-      setCheckSide(null);
-      setWinner(null);
-
-      return true;
-    } catch (e) {
-      console.error('[hook] 读档失败:', e);
-      return false;
-    }
-  }, []);
-
-  const hasSavedGame = useCallback((): boolean => {
-    return localStorage.getItem(SAVE_KEY) !== null;
+    setGameState({ board: restoredBoard, side: restoredSide });
+    setFen(data.fen);
+    setFenHistory(data.fenHistory);
+    setGameModeState(data.gameMode);
+    setPlayerSideState(data.playerSide);
+    setAiDepth(data.aiDepth);
+    setGameStatus(deriveStatus(restoredBoard, restoredSide));
+    setSelectedPos(null);
+    setLegalMoves([]);
+    setAiHints([]);
+    setIsThinking(false);
+    setCheckSide(null);
+    setWinner(null);
   }, []);
 
   // ── AI 提示 ─────────────────────────────────────────────────────
@@ -475,9 +440,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setAIHints,
     resign,
     offerDraw,
-    saveGame,
-    loadGame,
-    hasSavedGame,
+    restoreFromSave,
     executeMove,
   };
 }

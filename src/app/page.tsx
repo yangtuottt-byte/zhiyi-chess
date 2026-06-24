@@ -4,14 +4,18 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useChessGame, turnChar } from '@/hooks/useChessGame';
 import type { GameMode } from '@/hooks/useChessGame';
 import { useElectron } from '@/hooks/useElectron';
+import { useSaveManager } from '@/hooks/useSaveManager';
 import { uciToPositions } from '@/lib/uci';
 import { boardToFen } from '@/lib/fen';
 import { Side } from '@/core/types';
+import type { SaveSlot } from '@/lib/storage';
 import Chessboard from '@/components/Chessboard';
 import ControlsPanel from '@/components/ControlsPanel';
 import GameOverModal from '@/components/GameOverModal';
 import HomeScreen from '@/components/HomeScreen';
 import Toast from '@/components/Toast';
+import SaveModal from '@/components/SaveModal';
+import LoadModal from '@/components/LoadModal';
 
 /** AI 请求超时 */
 const AI_TIMEOUT_MS = 12_000;
@@ -42,6 +46,7 @@ export default function Home() {
   // ── Electron / 游戏状态 ──────────────────────────────────────
   const { isElectron, envChecked, analyzePosition, getEngineStatus } = useElectron();
   const game = useChessGame();
+  const saveManager = useSaveManager();
 
   // ── 页面级状态 ──────────────────────────────────────────────
   const [engineStatus, setEngineStatus] = useState('检测中...');
@@ -308,27 +313,46 @@ export default function Home() {
     }
   }, [game]);
 
-  // ── 存档/读档 ──────────────────────────────────────────────
+  // ── 存档/读档 (多槽位) ─────────────────────────────────────
 
-  const handleSave = useCallback(() => {
-    game.saveGame();
+  const handleConfirmSave = useCallback((name: string) => {
+    const slot: SaveSlot = {
+      id: crypto.randomUUID(),
+      name,
+      timestamp: Date.now(),
+      fen: game.fen,
+      fenHistory: [...game.fenHistory],
+      currentTurn: game.currentTurn,
+      gameMode: game.gameMode,
+      playerSide: game.playerSide,
+      aiDepth: game.aiDepth,
+    };
+    saveManager.addSlot(slot);
+    saveManager.closeSaveModal();
     setToast({ message: '对局已保存', type: 'success' });
-  }, [game]);
+  }, [game, saveManager]);
 
-  const handleLoad = useCallback(() => {
-    const ok = game.loadGame();
-    if (ok) {
-      autoMoveGuard.current = false;
-      coachHintGuard.current = false;
-      lastCoachFenRef.current = '';
-      resignedRef.current = false;
-      setAiResult(null);
-      setError(null);
-      setToast({ message: '存档已恢复', type: 'success' });
-    } else {
-      setToast({ message: '暂无存档', type: 'info' });
-    }
-  }, [game]);
+  const handleLoadSlot = useCallback((slot: SaveSlot) => {
+    game.restoreFromSave({
+      fen: slot.fen,
+      fenHistory: slot.fenHistory,
+      gameMode: slot.gameMode,
+      playerSide: slot.playerSide,
+      aiDepth: slot.aiDepth,
+    });
+    autoMoveGuard.current = false;
+    coachHintGuard.current = false;
+    lastCoachFenRef.current = '';
+    resignedRef.current = false;
+    setAiResult(null);
+    setError(null);
+    saveManager.closeLoadModal();
+    setToast({ message: '读档成功', type: 'success' });
+  }, [game, saveManager]);
+
+  const handleDeleteSlot = useCallback((id: string) => {
+    saveManager.removeSlot(id);
+  }, [saveManager]);
 
   // ── GameOver 原因生成 ──────────────────────────────────────
 
@@ -403,10 +427,26 @@ export default function Home() {
         error={error}
         onResign={handleResign}
         onDraw={handleDraw}
-        onSave={handleSave}
-        onLoad={handleLoad}
-        hasSavedGame={game.hasSavedGame()}
+        onSave={saveManager.openSaveModal}
+        onLoad={saveManager.openLoadModal}
       />
+
+      {/* ── 存档模态框 ── */}
+      {saveManager.showSaveModal && (
+        <SaveModal
+          onConfirm={handleConfirmSave}
+          onCancel={saveManager.closeSaveModal}
+        />
+      )}
+
+      {saveManager.showLoadModal && (
+        <LoadModal
+          slots={saveManager.slots}
+          onLoad={handleLoadSlot}
+          onDelete={handleDeleteSlot}
+          onClose={saveManager.closeLoadModal}
+        />
+      )}
 
       <details className="w-full max-w-[552px]">
         <summary className="cursor-pointer text-xs text-gray-600">FEN</summary>

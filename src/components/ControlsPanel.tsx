@@ -49,7 +49,6 @@ export interface ControlsPanelProps {
   // 存档
   onSave: () => void;
   onLoad: () => void;
-  hasSavedGame: boolean;
 }
 
 const DEPTH_OPTIONS = [
@@ -66,7 +65,7 @@ export default function ControlsPanel({
   onAnalyze, onClearHints, aiThinking, hasHints, isElectron,
   aiResult, error,
   onResign, onDraw,
-  onSave, onLoad, hasSavedGame,
+  onSave, onLoad,
 }: ControlsPanelProps) {
   const isGameOver = gameStatus === 'gameover';
 
@@ -150,8 +149,7 @@ export default function ControlsPanel({
             </button>
             <button
               onClick={() => { audio.playUI(); onLoad(); }}
-              disabled={!hasSavedGame}
-              className="rounded border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-sm text-blue-400 transition hover:border-blue-400/60 hover:bg-blue-500/20 disabled:opacity-30"
+              className="rounded border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-sm text-blue-400 transition hover:border-blue-400/60 hover:bg-blue-500/20"
             >
               读取对局
             </button>
