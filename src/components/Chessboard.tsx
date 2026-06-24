@@ -31,7 +31,9 @@ const HINT_STYLE = [
 
 // ─── 棋子圆形 ──────────────────────────────────────────────────────
 
-const transition = 'left 0.28s cubic-bezier(0.25, 0.8, 0.25, 1), top 0.28s cubic-bezier(0.25, 0.8, 0.25, 1)';
+function transition(dur: string) {
+  return `left ${dur} cubic-bezier(0.25, 0.8, 0.25, 1), top ${dur} cubic-bezier(0.25, 0.8, 0.25, 1)`;
+}
 
 function PieceToken({
   piece,
@@ -113,6 +115,8 @@ export interface ChessboardProps {
   lastCapture?: CaptureEffect | null;
   /** 哪一方被将军 */
   checkSide?: 'w' | 'b' | null;
+  /** 棋子动画时长 (CSS 时间字符串) */
+  animDuration?: string;
 }
 
 // ─── 棋盘组件 ──────────────────────────────────────────────────────
@@ -129,6 +133,7 @@ export default function Chessboard({
   lastMove,
   lastCapture,
   checkSide,
+  animDuration = '0.3s',
 }: ChessboardProps) {
   const legalSet = new Set(legalMoves.map((m) => `${m.row},${m.col}`));
 
@@ -364,7 +369,7 @@ export default function Chessboard({
               width: PIECE_R * 2,
               height: PIECE_R * 2,
               zIndex: isSel ? 25 : 21,
-              transition,
+              transition: transition(animDuration),
               pointerEvents: 'none',
             }}
           >

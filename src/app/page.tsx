@@ -5,6 +5,7 @@ import { useChessGame, turnChar, DIFFICULTY_CONFIG } from '@/hooks/useChessGame'
 import type { GameMode, AIDifficulty } from '@/hooks/useChessGame';
 import { useElectron } from '@/hooks/useElectron';
 import { useSaveManager } from '@/hooks/useSaveManager';
+import { useSettings } from '@/hooks/useSettings';
 import { uciToPositions } from '@/lib/uci';
 import { boardToFen } from '@/lib/fen';
 import { Side } from '@/core/types';
@@ -49,6 +50,7 @@ export default function Home() {
   const { isElectron, envChecked, analyzePosition, getEngineStatus } = useElectron();
   const game = useChessGame();
   const saveManager = useSaveManager();
+  const { animDuration } = useSettings();
 
   // ── 页面级状态 ──────────────────────────────────────────────
   const [engineStatus, setEngineStatus] = useState('检测中...');
@@ -399,6 +401,7 @@ export default function Home() {
           lastMove={game.lastMove}
           lastCapture={game.lastCapture}
           checkSide={game.checkSide}
+          animDuration={animDuration}
         />
 
         {game.winner && (

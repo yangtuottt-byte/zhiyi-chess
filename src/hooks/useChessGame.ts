@@ -5,6 +5,7 @@ import { Board, Piece, Position, Side } from '@/core/types';
 import { getLegalMoves, isInCheck, isGameOver } from '@/core/rules';
 import { fenToBoard, boardToFen } from '@/lib/fen';
 import { audio } from '@/lib/audio';
+import { recordResult } from '@/lib/stats';
 
 const DEFAULT_FEN =
   'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
@@ -360,6 +361,9 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
         const isPlayerWin = victor === turnChar(playerSideRef.current);
         setTimeout(() => audio.playGameOver(isPlayerWin ? 'win' : 'lose'), 300);
         setWinner(victor);
+        if (gameModeRef.current === 'battle') {
+          recordResult(isPlayerWin ? 'win' : 'lose');
+        }
       }
       setCheckSide(inCheck ? turnChar(nextSide) : null);
     },
@@ -504,6 +508,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setWinner(aiWinner);
     setGameStatus('gameover');
     audio.playGameOver('lose');
+    recordResult('lose');
   }, []);
 
   // ── 求和 ──────────────────────────────────────────────────────
@@ -516,6 +521,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       setWinner('draw');
       setGameStatus('gameover');
       setTimeout(() => audio.playGameOver('draw'), 200);
+      recordResult('draw');
     }
     return accepted;
   }, []);
