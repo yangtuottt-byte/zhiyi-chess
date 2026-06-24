@@ -1,21 +1,32 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { audio } from '@/lib/audio';
 
 /**
- * 便捷音效 Hook。
+ * 响应式音效 Hook。
  *
  * 用法:
- *   const { playMove, playCapture, playUI } = useSound();
- *   playMove();
+ *   const { isEnabled, toggle, playMove, playUI } = useSound();
+ *   <button onClick={toggle}>{isEnabled ? '🔊' : '🔇'}</button>
  */
 export function useSound() {
+  const [isEnabled, setIsEnabled] = useState(() => audio.isEnabled());
+
+  useEffect(() => {
+    setIsEnabled(audio.isEnabled());
+    return audio.onChange(setIsEnabled);
+  }, []);
+
+  const toggle = useCallback(() => {
+    audio.toggle();
+  }, []);
+
   const playMove = useCallback(() => audio.playMove(), []);
   const playCapture = useCallback(() => audio.playCapture(), []);
   const playCheck = useCallback(() => audio.playCheck(), []);
   const playGameOver = useCallback(() => audio.playGameOver(), []);
   const playUI = useCallback(() => audio.playUI(), []);
 
-  return { playMove, playCapture, playCheck, playGameOver, playUI };
+  return { isEnabled, toggle, playMove, playCapture, playCheck, playGameOver, playUI };
 }

@@ -1,8 +1,7 @@
 'use client';
 
 import type { GameMode, GameStatus, AIDifficulty } from '@/hooks/useChessGame';
-import { DIFFICULTY_CONFIG } from '@/hooks/useChessGame';
-import { audio } from '@/lib/audio';
+import { useSound } from '@/hooks/useSound';
 
 export interface ControlsPanelProps {
   // 模式
@@ -69,6 +68,7 @@ export default function ControlsPanel({
   onSave, onLoad,
 }: ControlsPanelProps) {
   const isGameOver = gameStatus === 'gameover';
+  const { isEnabled, toggle, playUI } = useSound();
 
   return (
     <div className="w-full max-w-[552px] space-y-3">
@@ -125,14 +125,14 @@ export default function ControlsPanel({
       {/* ── 操作按钮 ── */}
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => { audio.playUI(); onUndo(); }}
+          onClick={() => { playUI(); onUndo(); }}
           disabled={!canUndo}
           className="rounded border border-gray-600 px-4 py-1.5 text-sm text-gray-300 transition hover:border-gray-400 hover:bg-gray-700 disabled:opacity-30"
         >
           悔棋
         </button>
         <button
-          onClick={() => { audio.playUI(); onReset(); }}
+          onClick={() => { playUI(); onReset(); }}
           className="rounded border border-gray-600 px-4 py-1.5 text-sm text-gray-300 transition hover:border-gray-400 hover:bg-gray-700"
         >
           新局
@@ -142,14 +142,14 @@ export default function ControlsPanel({
         {gameMode === 'practice' && (
           <>
             <button
-              onClick={() => { audio.playUI(); onSave(); }}
+              onClick={() => { playUI(); onSave(); }}
               disabled={isGameOver}
               className="rounded border border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5 text-sm text-emerald-400 transition hover:border-emerald-400/60 hover:bg-emerald-500/20 disabled:opacity-30"
             >
               保存对局
             </button>
             <button
-              onClick={() => { audio.playUI(); onLoad(); }}
+              onClick={() => { playUI(); onLoad(); }}
               className="rounded border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-sm text-blue-400 transition hover:border-blue-400/60 hover:bg-blue-500/20"
             >
               读取对局
@@ -161,13 +161,13 @@ export default function ControlsPanel({
         {gameMode === 'battle' && !isGameOver && (
           <>
             <button
-              onClick={() => { audio.playUI(); onResign(); }}
+              onClick={() => { playUI(); onResign(); }}
               className="rounded border border-red-500/30 bg-red-500/10 px-4 py-1.5 text-sm text-red-400 transition hover:border-red-400/60 hover:bg-red-500/20"
             >
               认输
             </button>
             <button
-              onClick={() => { audio.playUI(); onDraw(); }}
+              onClick={() => { playUI(); onDraw(); }}
               className="rounded border border-yellow-500/30 bg-yellow-500/10 px-4 py-1.5 text-sm text-yellow-400 transition hover:border-yellow-400/60 hover:bg-yellow-500/20"
             >
               求和
@@ -178,7 +178,7 @@ export default function ControlsPanel({
         {gameMode !== 'practice' && (
           <>
             <button
-              onClick={() => { audio.playUI(); onAnalyze(); }}
+              onClick={() => { playUI(); onAnalyze(); }}
               disabled={aiThinking || !isElectron}
               className="rounded bg-amber-500 px-4 py-1.5 text-sm font-semibold text-gray-900 transition hover:bg-amber-400 disabled:opacity-50"
             >
@@ -195,9 +195,27 @@ export default function ControlsPanel({
           </>
         )}
 
+        {/* 音效开关 */}
+        <button
+          onClick={toggle}
+          className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1.5 text-sm text-slate-400 backdrop-blur-md transition-all hover:border-slate-500/40 hover:bg-white/[0.08] hover:text-slate-200"
+          title={isEnabled ? '关闭音效' : '开启音效'}
+        >
+          {isEnabled ? (
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M6.5 8.5H4a1 1 0 00-1 1v5a1 1 0 001 1h2.5l4.5 4V4.5L6.5 8.5z" />
+            </svg>
+          ) : (
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+            </svg>
+          )}
+        </button>
+
         {/* 返回主菜单 */}
         <button
-          onClick={() => { audio.playUI(); onBackToHome(); }}
+          onClick={() => { playUI(); onBackToHome(); }}
           className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-slate-400 backdrop-blur-md transition-all duration-300 hover:border-slate-500/40 hover:bg-white/[0.08] hover:text-slate-200"
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { GameMode, AIDifficulty } from '@/hooks/useChessGame';
 import { DIFFICULTY_CONFIG } from '@/hooks/useChessGame';
 import { Side } from '@/core/types';
-import { audio } from '@/lib/audio';
+import { useSound } from '@/hooks/useSound';
 
 export interface HomeScreenProps {
   onStartGame: (mode: GameMode, difficulty: AIDifficulty, playerSide: Side) => void;
@@ -59,11 +59,12 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
   const [difficulty, setDifficulty] = useState<AIDifficulty>('medium');
   const [playerSide, setPlayerSide] = useState<Side>(Side.Red);
   const [showSetupModal, setShowSetupModal] = useState(false);
+  const { isEnabled, toggle, playUI } = useSound();
 
   const currentMode = MODES.find((m) => m.mode === selected)!;
 
   const handleStartClick = () => {
-    audio.playUI();
+    playUI();
     if (currentMode.needsAI) {
       setShowSetupModal(true);
     } else {
@@ -72,13 +73,31 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
   };
 
   const handleConfirmSetup = () => {
-    audio.playUI();
+    playUI();
     setShowSetupModal(false);
     onStartGame(selected, difficulty, playerSide);
   };
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-950">
+      {/* ── 音效开关 ── */}
+      <button
+        onClick={toggle}
+        className="absolute top-5 right-5 z-50 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-400 backdrop-blur-md transition-all hover:border-slate-500/40 hover:bg-white/[0.08] hover:text-slate-200"
+        title={isEnabled ? '关闭音效' : '开启音效'}
+      >
+        {isEnabled ? (
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M6.5 8.5H4a1 1 0 00-1 1v5a1 1 0 001 1h2.5l4.5 4V4.5L6.5 8.5z" />
+          </svg>
+        ) : (
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+          </svg>
+        )}
+      </button>
+
       {/* ── 径向渐变光晕 (聚光灯效果) ── */}
       <div
         className="pointer-events-none absolute inset-0 z-0"
@@ -119,7 +138,7 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
             return (
               <button
                 key={m.mode}
-                onClick={() => { audio.playUI(); setSelected(m.mode); }}
+                onClick={() => { playUI(); setSelected(m.mode); }}
                 className={`group flex items-center gap-5 rounded-2xl border px-6 py-5 text-left transition-all duration-300 ease-out ${
                   isActive
                     ? 'border-amber-500/50 bg-amber-500/10 shadow-2xl shadow-amber-500/10 -translate-y-1'
@@ -236,7 +255,7 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
                   return (
                     <button
                       key={opt.key}
-                      onClick={() => { audio.playUI(); setDifficulty(opt.key); }}
+                      onClick={() => { playUI(); setDifficulty(opt.key); }}
                       className={`flex flex-col items-center gap-2 rounded-xl border px-4 py-4 transition-all duration-300 ${
                         isActive
                           ? `${highlights[opt.color]} -translate-y-1`
@@ -269,7 +288,7 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
               </h3>
               <div className="flex gap-3">
                 <button
-                  onClick={() => { audio.playUI(); setPlayerSide(Side.Red); }}
+                  onClick={() => { playUI(); setPlayerSide(Side.Red); }}
                   className={`group flex flex-1 flex-col items-center gap-2 rounded-xl border px-6 py-4 transition-all duration-300 ${
                     playerSide === Side.Red
                       ? 'border-red-500/60 bg-red-500/20 ring-1 ring-red-500/30 -translate-y-1'
@@ -290,7 +309,7 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
                 </button>
 
                 <button
-                  onClick={() => { audio.playUI(); setPlayerSide(Side.Black); }}
+                  onClick={() => { playUI(); setPlayerSide(Side.Black); }}
                   className={`group flex flex-1 flex-col items-center gap-2 rounded-xl border px-6 py-4 transition-all duration-300 ${
                     playerSide === Side.Black
                       ? 'border-gray-500/60 bg-gray-500/20 ring-1 ring-gray-500/30 -translate-y-1'
