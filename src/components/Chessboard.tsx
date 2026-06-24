@@ -31,7 +31,7 @@ const HINT_STYLE = [
 
 // ─── 棋子圆形 (纯展示，无定位) ─────────────────────────────────────
 
-function PieceCircle({ piece, isSelected }: { piece: Piece; isSelected: boolean }) {
+function PieceCircle({ piece, isSelected, flipped }: { piece: Piece; isSelected: boolean; flipped?: boolean }) {
   const isRed = piece.side === Side.Red;
 
   return (
@@ -57,6 +57,7 @@ function PieceCircle({ piece, isSelected }: { piece: Piece; isSelected: boolean 
         color: isRed ? '#fef2f2' : '#e5e7eb',
         fontFamily: "'KaiTi','STKaiti','楷体',serif",
         cursor: 'pointer',
+        transform: flipped ? 'rotate(180deg)' : undefined,
       }}
     >
       {PIECE_CHAR[piece.type][piece.side]}
@@ -81,6 +82,8 @@ export interface ChessboardProps {
   onCellClick: (row: number, col: number) => void;
   /** 棋盘锁定：AI 思考中/非己方回合时阻止交互并显示遮罩 */
   boardLocked?: boolean;
+  /** 翻转棋盘（玩家执黑时黑方在底部） */
+  flipped?: boolean;
 }
 
 // ─── 棋盘组件 ──────────────────────────────────────────────────────
@@ -93,6 +96,7 @@ export default function Chessboard({
   currentSide,
   onCellClick,
   boardLocked = false,
+  flipped = false,
 }: ChessboardProps) {
   // 快速查找集合
   const legalSet = new Set(legalMoves.map((m) => `${m.row},${m.col}`));
@@ -100,7 +104,11 @@ export default function Chessboard({
   return (
     <div
       className="relative select-none"
-      style={{ width: BOARD_W, height: BOARD_H }}
+      style={{
+        width: BOARD_W,
+        height: BOARD_H,
+        transform: flipped ? 'rotate(180deg)' : undefined,
+      }}
     >
       {/* ══════════════ Layer 1: SVG 网格 ══════════════ */}
       <svg
@@ -178,6 +186,7 @@ export default function Chessboard({
           fill="#8b4513"
           fontFamily="'KaiTi','STKaiti','楷体',serif"
           letterSpacing={14}
+          transform={flipped ? `rotate(180, ${PAD + 4 * CELL}, ${PAD + 4.5 * CELL})` : undefined}
         >
           楚河　　汉界
         </text>
@@ -295,7 +304,7 @@ export default function Chessboard({
               onClick={() => onCellClick(r, c)}
             >
               {piece ? (
-                <PieceCircle piece={piece} isSelected={isSel} />
+                <PieceCircle piece={piece} isSelected={isSel} flipped={flipped} />
               ) : (
                 /* 空交叉点的隐形点击区域 */
                 <div
@@ -309,7 +318,10 @@ export default function Chessboard({
       )}
 
       {/* ══════════════ 行棋方标签 ══════════════ */}
-      <div className="absolute top-1 right-2 text-xs font-bold text-amber-800/70 z-30 pointer-events-none">
+      <div
+        className="absolute top-1 right-2 text-xs font-bold text-amber-800/70 z-30 pointer-events-none"
+        style={{ transform: flipped ? 'rotate(180deg)' : undefined }}
+      >
         {currentSide === Side.Red ? '红方走' : '黑方走'}
       </div>
 

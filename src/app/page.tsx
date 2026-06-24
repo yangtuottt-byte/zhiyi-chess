@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useChessGame } from '@/hooks/useChessGame';
+import { useChessGame, turnChar } from '@/hooks/useChessGame';
 import type { GameMode } from '@/hooks/useChessGame';
 import { useElectron } from '@/hooks/useElectron';
 import { uciToPositions } from '@/lib/uci';
@@ -11,11 +11,12 @@ import Chessboard from '@/components/Chessboard';
 import ControlsPanel from '@/components/ControlsPanel';
 import GameOverModal from '@/components/GameOverModal';
 import HomeScreen from '@/components/HomeScreen';
+import Toast from '@/components/Toast';
 
 /** AI 请求超时 */
 const AI_TIMEOUT_MS = 12_000;
 
-/** ★ 强制从 board 实时构建 FEN，含回合标记断言 */
+/** 强制从 board 实时构建 FEN，含回合标记断言 */
 function buildSyncedFen(
   board: ReturnType<typeof useChessGame>['board'],
   expectedTurn: 'w' | 'b'
@@ -46,13 +47,16 @@ export default function Home() {
   const [engineStatus, setEngineStatus] = useState('检测中...');
   const [error, setError] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<any>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'info' | 'error' | 'success' } | null>(null);
 
   const lastCoachFenRef = useRef('');
   const autoMoveGuard = useRef(false);
   const coachHintGuard = useRef(false);
+  const resignedRef = useRef(false);
 
+  const playerTurnChar = turnChar(game.playerSide);
   const boardLocked =
-    (game.gameMode !== 'practice' && game.currentTurn === 'b') || game.isThinking;
+    (game.gameMode !== 'practice' && game.currentTurn !== playerTurnChar) || game.isThinking;
 
   // ── 引擎初始化 ──────────────────────────────────────────────
 
@@ -65,13 +69,14 @@ export default function Home() {
   }, [envChecked, isElectron, getEngineStatus]);
 
   // ═══════════════════════════════════════════════════════════════
-  // EFFECT A: AI 自动走黑方 (coach + battle)
+  // EFFECT A: AI 自动走棋 (coach + battle)
   // ═══════════════════════════════════════════════════════════════
 
   useEffect(() => {
     if (currentView !== 'game') return;
     if (game.gameMode === 'practice') return;
-    if (game.currentTurn !== 'b') return;
+    // AI 走棋: 非玩家回合时自动走
+    if (game.currentTurn === playerTurnChar) return;
     if (game.gameStatus !== 'playing') return;
     if (game.winner) return;
     if (!isElectron) return;
@@ -82,7 +87,7 @@ export default function Home() {
 
     const timer = setTimeout(async () => {
       try {
-        const syncedFen = buildSyncedFen(game.board, 'b');
+        const syncedFen = buildSyncedFen(game.board, game.currentTurn);
         console.log('📡 [AI Auto-Move] 发起请求  FEN:', syncedFen);
 
         const result = await Promise.race([
@@ -115,7 +120,7 @@ export default function Home() {
       game.setIsThinking(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentView, game.gameMode, game.currentTurn, game.gameStatus, game.fen, isElectron, game.aiDepth]);
+  }, [currentView, game.gameMode, game.currentTurn, game.gameStatus, game.fen, isElectron, playerTurnChar]);
 
   // ═══════════════════════════════════════════════════════════════
   // EFFECT B: AI 教学自动提示 (仅 coach)
@@ -124,7 +129,8 @@ export default function Home() {
   useEffect(() => {
     if (currentView !== 'game') return;
     if (game.gameMode !== 'coach') return;
-    if (game.currentTurn !== 'w') return;
+    // 仅在玩家回合时显示提示
+    if (game.currentTurn !== playerTurnChar) return;
     if (game.gameStatus !== 'playing') return;
     if (game.winner) return;
     if (!isElectron) return;
@@ -135,7 +141,7 @@ export default function Home() {
 
     let syncedFen: string;
     try {
-      syncedFen = buildSyncedFen(game.board, 'w');
+      syncedFen = buildSyncedFen(game.board, game.currentTurn);
       lastCoachFenRef.current = syncedFen;
     } catch (e: any) {
       console.error('❌ [Coach Hint] FEN构建失败:', e);
@@ -180,7 +186,7 @@ export default function Home() {
 
     return () => { cancelled = true; clearTimeout(timer); coachHintGuard.current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentView, game.gameMode, game.currentTurn, game.gameStatus, game.fen, isElectron]);
+  }, [currentView, game.gameMode, game.currentTurn, game.gameStatus, game.fen, isElectron, playerTurnChar]);
 
   // ═══════════════════════════════════════════════════════════════
   // EFFECT C: 对战模式强制清空提示
@@ -231,13 +237,15 @@ export default function Home() {
   // ── 开始游戏 (从 HomeScreen 进入) ────────────────────────────
 
   const handleStartGame = useCallback(
-    (mode: GameMode, depth: number) => {
-      console.log('[page] 开始游戏  mode:', mode, 'depth:', depth);
+    (mode: GameMode, depth: number, playerSide: Side) => {
+      console.log('[page] 开始游戏  mode:', mode, 'depth:', depth, 'playerSide:', playerSide);
       autoMoveGuard.current = false;
       coachHintGuard.current = false;
       lastCoachFenRef.current = '';
+      resignedRef.current = false;
       setAiResult(null);
       setError(null);
+      game.setPlayerSide(playerSide);
       game.setGameMode(mode);
       game.setAiDepth(depth);
       game.resetGame();
@@ -266,6 +274,7 @@ export default function Home() {
     autoMoveGuard.current = false;
     coachHintGuard.current = false;
     lastCoachFenRef.current = '';
+    resignedRef.current = false;
     setAiResult(null);
     setError(null);
   }, [game]);
@@ -284,6 +293,57 @@ export default function Home() {
     setAiResult(null);
     lastCoachFenRef.current = '';
   }, [game]);
+
+  // ── 对战交互 ───────────────────────────────────────────────
+
+  const handleResign = useCallback(() => {
+    resignedRef.current = true;
+    game.resign();
+  }, [game]);
+
+  const handleDraw = useCallback(() => {
+    const accepted = game.offerDraw();
+    if (!accepted) {
+      setToast({ message: '电脑拒绝求和', type: 'info' });
+    }
+  }, [game]);
+
+  // ── 存档/读档 ──────────────────────────────────────────────
+
+  const handleSave = useCallback(() => {
+    game.saveGame();
+    setToast({ message: '对局已保存', type: 'success' });
+  }, [game]);
+
+  const handleLoad = useCallback(() => {
+    const ok = game.loadGame();
+    if (ok) {
+      autoMoveGuard.current = false;
+      coachHintGuard.current = false;
+      lastCoachFenRef.current = '';
+      resignedRef.current = false;
+      setAiResult(null);
+      setError(null);
+      setToast({ message: '存档已恢复', type: 'success' });
+    } else {
+      setToast({ message: '暂无存档', type: 'info' });
+    }
+  }, [game]);
+
+  // ── GameOver 原因生成 ──────────────────────────────────────
+
+  const getGameOverReason = (): string => {
+    if (game.winner === 'draw') return '双方同意和棋';
+    if (resignedRef.current) {
+      const loser = game.winner === 'w' ? '黑方' : '红方';
+      const victor = game.winner === 'w' ? '红方' : '黑方';
+      return `${loser}认输，${victor}获胜`;
+    }
+    if (game.checkSide) {
+      return `绝杀！${game.checkSide === 'w' ? '红方' : '黑方'}无路可逃`;
+    }
+    return '困毙！无子可走';
+  };
 
   // ═══════════════════════════════════════════════════════════════
   // 渲染
@@ -308,22 +368,21 @@ export default function Home() {
           currentSide={game.currentSide}
           onCellClick={game.handleCellClick}
           boardLocked={boardLocked}
+          flipped={game.boardFlipped}
         />
 
         {game.winner && (
           <GameOverModal
             winner={game.winner}
-            reason={
-              game.checkSide
-                ? `绝杀！${game.checkSide === 'w' ? '红方' : '黑方'}无路可逃`
-                : '困毙！无子可走'
-            }
+            reason={getGameOverReason()}
             onNewGame={handleReset}
+            onBackToHome={handleBackToHome}
           />
         )}
       </div>
 
       <ControlsPanel
+        gameMode={game.gameMode}
         aiDepth={game.aiDepth}
         onSetAiDepth={game.setAiDepth}
         engineStatus={engineStatus}
@@ -342,6 +401,11 @@ export default function Home() {
         isElectron={isElectron}
         aiResult={aiResult}
         error={error}
+        onResign={handleResign}
+        onDraw={handleDraw}
+        onSave={handleSave}
+        onLoad={handleLoad}
+        hasSavedGame={game.hasSavedGame()}
       />
 
       <details className="w-full max-w-[552px]">
@@ -350,6 +414,15 @@ export default function Home() {
           {game.fen}
         </code>
       </details>
+
+      {/* Toast 通知 */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </main>
   );
 }

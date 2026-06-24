@@ -9,10 +9,13 @@ import { audio } from '@/lib/audio';
 const DEFAULT_FEN =
   'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
 
+const SAVE_KEY = 'zhiyi_saved_game';
+
 // ─── 类型 ─────────────────────────────────────────────────────────
 
 export type GameMode = 'practice' | 'coach' | 'battle';
 export type GameStatus = 'playing' | 'check' | 'gameover';
+export type Winner = 'w' | 'b' | 'draw';
 
 export interface AIHint {
   multipv: number;
@@ -27,6 +30,15 @@ export interface UseChessGameOptions {
   initialFen?: string;
 }
 
+export interface SavedGameData {
+  fen: string;
+  fenHistory: string[];
+  gameMode: GameMode;
+  playerSide: Side;
+  aiDepth: number;
+  savedAt: string;
+}
+
 export interface UseChessGameReturn {
   // 核心状态
   board: Board;
@@ -35,8 +47,12 @@ export interface UseChessGameReturn {
   currentTurn: 'w' | 'b';
   gameMode: GameMode;
   gameStatus: GameStatus;
-  checkSide: 'w' | 'b' | null;  // 哪方被将军
-  winner: 'w' | 'b' | null;     // 胜方
+  checkSide: 'w' | 'b' | null;
+  winner: Winner | null;
+
+  // 玩家设置
+  playerSide: Side;
+  boardFlipped: boolean;
 
   // AI
   aiHints: AIHint[];
@@ -55,10 +71,20 @@ export interface UseChessGameReturn {
   setGameMode: (mode: GameMode) => void;
   setAiDepth: (depth: number) => void;
   setIsThinking: (v: boolean) => void;
+  setPlayerSide: (side: Side) => void;
   handleCellClick: (row: number, col: number) => void;
   undoMove: (steps?: number) => void;
   resetGame: () => void;
   setAIHints: (hints: AIHint[]) => void;
+
+  // 对战交互
+  resign: () => void;
+  offerDraw: () => boolean;
+
+  // 存档
+  saveGame: () => void;
+  loadGame: () => boolean;
+  hasSavedGame: () => boolean;
 
   /** 供 useEffect 驱动的 AI 自动落子调用 */
   executeMove: (from: Position, to: Position) => void;
@@ -73,7 +99,7 @@ function deriveStatus(board: Board, side: Side): GameStatus {
   return 'playing';
 }
 
-function turnChar(side: Side): 'w' | 'b' {
+export function turnChar(side: Side): 'w' | 'b' {
   return side === Side.Red ? 'w' : 'b';
 }
 
@@ -100,11 +126,14 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   const [aiDepth, setAiDepth] = useState(10);
   const [isThinking, setIsThinking] = useState(false);
   const [checkSide, setCheckSide] = useState<'w' | 'b' | null>(null);
-  const [winner, setWinner] = useState<'w' | 'b' | null>(null);
+  const [winner, setWinner] = useState<Winner | null>(null);
 
   const [selectedPos, setSelectedPos] = useState<Position | null>(null);
   const [legalMoves, setLegalMoves] = useState<Position[]>([]);
   const [aiHints, setAiHints] = useState<AIHint[]>([]);
+
+  // 玩家阵营（默认执红）
+  const [playerSide, setPlayerSideState] = useState<Side>(Side.Red);
 
   // Refs — 始终保持最新值，避免闭包过期
   const boardRef = useRef(board);
@@ -115,6 +144,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   const gameStatusRef = useRef(gameStatus);
   const isThinkingRef = useRef(isThinking);
   const winnerRef = useRef(winner);
+  const playerSideRef = useRef(playerSide);
 
   boardRef.current = board;
   sideRef.current = currentSide;
@@ -124,12 +154,20 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   gameStatusRef.current = gameStatus;
   isThinkingRef.current = isThinking;
   winnerRef.current = winner;
+  playerSideRef.current = playerSide;
 
   // ── 模式切换 (含重置) ─────────────────────────────────────────
 
   const setGameMode = useCallback((mode: GameMode) => {
     console.log('[hook] 切换模式 →', mode);
     setGameModeState(mode);
+  }, []);
+
+  // ── 阵营设置 ─────────────────────────────────────────────────
+
+  const setPlayerSide = useCallback((side: Side) => {
+    console.log('[hook] 玩家阵营 →', side);
+    setPlayerSideState(side);
   }, []);
 
   // ── 内部走子引擎 ─────────────────────────────────────────────
@@ -142,11 +180,10 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       newBoard[from.row][from.col] = null;
 
       const nextSide = flipSide(s);
-      // ★ 关键：FEN 的 side-to-move 必须是"下一步该谁走"
       const newFen = boardToFen(newBoard, nextSide);
       const status = deriveStatus(newBoard, nextSide);
-      const result = isGameOver(newBoard, nextSide); // 终局检测
-      const inCheck = isInCheck(newBoard, nextSide); // 将军检测
+      const result = isGameOver(newBoard, nextSide);
+      const inCheck = isInCheck(newBoard, nextSide);
 
       console.log(
         `[hook] applyMove ${turnChar(s)}→${turnChar(nextSide)}  ` +
@@ -181,24 +218,21 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       setLegalMoves([]);
       setAiHints([]);
 
-      // 音效反馈
       if (captured) {
         audio.playCapture();
       } else {
         audio.playMove();
       }
       if (inCheck) {
-        setTimeout(() => audio.playCheck(), 150); // 将军音效略延迟
+        setTimeout(() => audio.playCheck(), 150);
       }
       if (result) {
-        setTimeout(() => audio.playGameOver(), 300); // 终局音效更后
+        setTimeout(() => audio.playGameOver(), 300);
       }
 
-      // 终局判定：绝杀/困毙 → 走子方获胜
       if (result) {
         setWinner(turnChar(flipSide(nextSide)));
       }
-      // 将军状态（不受终局影响，始终更新）
       setCheckSide(inCheck ? turnChar(nextSide) : null);
     },
     [applyMove]
@@ -208,7 +242,6 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
-      // ★ 锁: AI 思考中或游戏结束 → 直接拒绝
       if (isThinkingRef.current) {
         console.log('[hook] 点击被拦截: isThinking=true');
         return;
@@ -219,17 +252,16 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       const side = sideRef.current;
       const clickedPiece = currentBoard[row]?.[col] ?? null;
 
-      // ★ 教练/对战模式下黑方由 AI 控制 → 拦截
+      // 对战/教练模式下 AI 控制的阵营 → 拦截
       if (
         (gameModeRef.current === 'battle' ||
           gameModeRef.current === 'coach') &&
-        side === Side.Black
+        side !== playerSideRef.current
       ) {
-        console.log('[hook] 点击被拦截: 黑方由AI控制');
+        console.log('[hook] 点击被拦截: 该阵营由AI控制');
         return;
       }
 
-      // 已选中棋子 → 检查落点
       if (selectedPos) {
         const isLegal = legalMoves.some(
           (m) => m.row === row && m.col === col
@@ -240,20 +272,17 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
           return;
         }
 
-        // 点击己方另一枚棋子 → 切换选中
         if (clickedPiece && clickedPiece.side === side) {
           setSelectedPos({ row, col });
           setLegalMoves(getLegalMoves(currentBoard, row, col));
           return;
         }
 
-        // 取消选中
         setSelectedPos(null);
         setLegalMoves([]);
         return;
       }
 
-      // 未选中 → 点击己方棋子则选中
       if (clickedPiece && clickedPiece.side === side) {
         setSelectedPos({ row, col });
         setLegalMoves(getLegalMoves(currentBoard, row, col));
@@ -318,6 +347,94 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setWinner(null);
   }, [startFen]);
 
+  // ── 认输 ──────────────────────────────────────────────────────
+
+  const resign = useCallback(() => {
+    if (gameStatusRef.current === 'gameover') return;
+    const mode = gameModeRef.current;
+    if (mode !== 'battle') return;
+
+    // AI 获胜 = 非玩家阵营
+    const aiSide = playerSideRef.current === Side.Red ? Side.Black : Side.Red;
+    const aiWinner = turnChar(aiSide);
+    console.log('[hook] 认输 → 胜者:', aiWinner);
+    setWinner(aiWinner);
+    setGameStatus('gameover');
+    audio.playGameOver();
+  }, []);
+
+  // ── 求和 ──────────────────────────────────────────────────────
+
+  const offerDraw = useCallback((): boolean => {
+    if (gameStatusRef.current === 'gameover') return false;
+    // 80% 概率同意
+    const accepted = Math.random() < 0.8;
+    console.log('[hook] 求和 →', accepted ? '同意' : '拒绝');
+    if (accepted) {
+      setWinner('draw');
+      setGameStatus('gameover');
+      setTimeout(() => audio.playGameOver(), 200);
+    }
+    return accepted;
+  }, []);
+
+  // ── 存档 ──────────────────────────────────────────────────────
+
+  const saveGame = useCallback(() => {
+    const data: SavedGameData = {
+      fen: fenRef.current,
+      fenHistory: fenHistoryRef.current,
+      gameMode: gameModeRef.current,
+      playerSide: playerSideRef.current,
+      aiDepth: aiDepth,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    console.log('[hook] 存档成功');
+  }, [aiDepth]);
+
+  const loadGame = useCallback((): boolean => {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      console.log('[hook] 无存档');
+      return false;
+    }
+    try {
+      const data: SavedGameData = JSON.parse(raw);
+      const { board: restoredBoard, sideToMove: restoredSide } = fenToBoard(data.fen);
+
+      console.log('[hook] 读档 → side=', turnChar(restoredSide));
+
+      boardRef.current = restoredBoard;
+      sideRef.current = restoredSide;
+      fenRef.current = data.fen;
+      fenHistoryRef.current = data.fenHistory;
+
+      setGameState({ board: restoredBoard, side: restoredSide });
+      setFen(data.fen);
+      setFenHistory(data.fenHistory);
+      setGameModeState(data.gameMode);
+      setPlayerSideState(data.playerSide);
+      setAiDepth(data.aiDepth);
+      setGameStatus(deriveStatus(restoredBoard, restoredSide));
+      setSelectedPos(null);
+      setLegalMoves([]);
+      setAiHints([]);
+      setIsThinking(false);
+      setCheckSide(null);
+      setWinner(null);
+
+      return true;
+    } catch (e) {
+      console.error('[hook] 读档失败:', e);
+      return false;
+    }
+  }, []);
+
+  const hasSavedGame = useCallback((): boolean => {
+    return localStorage.getItem(SAVE_KEY) !== null;
+  }, []);
+
   // ── AI 提示 ─────────────────────────────────────────────────────
 
   const setAIHints = useCallback((hints: AIHint[]) => {
@@ -339,6 +456,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     gameStatus,
     checkSide,
     winner,
+    playerSide,
+    boardFlipped: playerSide === Side.Black,
     aiHints,
     aiDepth,
     isThinking,
@@ -349,10 +468,16 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setGameMode,
     setAiDepth,
     setIsThinking,
+    setPlayerSide,
     handleCellClick,
     undoMove,
     resetGame,
     setAIHints,
+    resign,
+    offerDraw,
+    saveGame,
+    loadGame,
+    hasSavedGame,
     executeMove,
   };
 }
