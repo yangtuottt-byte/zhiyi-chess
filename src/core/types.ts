@@ -19,6 +19,7 @@ export enum Side {
 export interface Piece {
   type: PieceType;
   side: Side;
+  id?: string; // 稳定 ID 用于 React 动画 key
 }
 
 /** 棋盘坐标 */
@@ -47,7 +48,15 @@ export function createInitialBoard(): Board {
     Array(BOARD_COLS).fill(null)
   );
 
-  const p = (type: PieceType, side: Side): Piece => ({ type, side });
+  const counters = new Map<string, number>();
+  const pid = (type: PieceType, side: Side): string => {
+    const key = `${side}-${type}`;
+    const n = (counters.get(key) ?? 0) + 1;
+    counters.set(key, n);
+    return `${side}-${type}-${n}`;
+  };
+
+  const p = (type: PieceType, side: Side): Piece => ({ type, side, id: pid(type, side) });
 
   // 黑方底线 (row 0)
   board[0][0] = p(PieceType.Rook, Side.Black);

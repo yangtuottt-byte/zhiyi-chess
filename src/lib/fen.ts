@@ -52,6 +52,14 @@ export function fenToBoard(fen: string): { board: Board; sideToMove: Side } {
   const parts = fen.split(' ');
   const rankStrs = parts[0].split('/');
 
+  const idCounters = new Map<string, number>();
+  const genId = (side: string, type: string): string => {
+    const key = `${side}-${type}`;
+    const n = (idCounters.get(key) ?? 0) + 1;
+    idCounters.set(key, n);
+    return `${side}-${type}-${n}`;
+  };
+
   for (let row = 0; row < BOARD_ROWS; row++) {
     const rank = rankStrs[row];
     if (!rank) break;
@@ -63,7 +71,7 @@ export function fenToBoard(fen: string): { board: Board; sideToMove: Side } {
       } else {
         const def = FEN_TO_PIECE[ch];
         if (def && col < BOARD_COLS) {
-          board[row][col] = { type: def.type, side: def.side };
+          board[row][col] = { type: def.type, side: def.side, id: genId(def.side, def.type) };
         }
         col++;
       }

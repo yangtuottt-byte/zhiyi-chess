@@ -396,6 +396,9 @@ export default function Home() {
           onCellClick={game.handleCellClick}
           boardLocked={boardLocked}
           flipped={game.boardFlipped}
+          lastMove={game.lastMove}
+          lastCapture={game.lastCapture}
+          checkSide={game.checkSide}
         />
 
         {game.winner && (

@@ -26,3 +26,19 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.35);
 }
+
+/* ── 将军红光脉冲 ── */
+@keyframes checkPulse {
+  0%, 100% { box-shadow: 0 0 16px rgba(239,68,68,0.8), 0 0 28px rgba(239,68,68,0.4), 0 2px 6px rgba(0,0,0,0.45); }
+  50%      { box-shadow: 0 0 28px rgba(239,68,68,1), 0 0 48px rgba(239,68,68,0.7), 0 2px 6px rgba(0,0,0,0.45); }
+}
+
+/* ── 吃子残影淡出缩小 ── */
+@keyframes captureFade {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.3); }
+}
+
+.animate-capture-fade {
+  animation: captureFade 0.4s ease-out forwards;
+}

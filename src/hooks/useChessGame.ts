@@ -85,6 +85,8 @@ export interface UseChessGameReturn {
   currentMoveIndex: number;
   isReviewing: boolean;
   moveRecords: (MoveRecord | null)[];
+  lastMove: MoveRecord | null;
+  lastCapture: { piece: Piece; pos: Position } | null;
   goToStart: () => void;
   goBack: () => void;
   goForward: () => void;
@@ -161,6 +163,9 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
   const [moveRecords, setMoveRecords] = useState<(MoveRecord | null)[]>([null]);
 
+  // 视觉反馈
+  const [lastCapture, setLastCapture] = useState<{ piece: Piece; pos: Position } | null>(null);
+
   // Refs — 始终保持最新值，避免闭包过期
   const boardRef = useRef(board);
   const sideRef = useRef(currentSide);
@@ -232,6 +237,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     } else {
       setWinner(null);
     }
+    setLastCapture(null);
   }, []);
 
   // ── 时光机导航 ────────────────────────────────────────────────
@@ -341,6 +347,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
 
       if (captured) {
         audio.playCapture();
+        setLastCapture({ piece: captured, pos: to });
+        setTimeout(() => setLastCapture(null), 400);
       } else {
         audio.playMove();
       }
@@ -450,6 +458,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       setAiHints([]);
       setCheckSide(null);
       setWinner(null);
+      setLastCapture(null);
     },
     []
   );
@@ -480,6 +489,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setIsThinking(false);
     setCheckSide(null);
     setWinner(null);
+    setLastCapture(null);
   }, [startFen]);
 
   // ── 认输 ──────────────────────────────────────────────────────
@@ -542,6 +552,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setIsThinking(false);
     setCheckSide(null);
     setWinner(null);
+    setLastCapture(null);
   }, []);
 
   // ── AI 提示 ─────────────────────────────────────────────────────
@@ -579,6 +590,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     currentMoveIndex,
     isReviewing,
     moveRecords,
+    lastMove: currentMoveIndex > 0 ? (moveRecords[currentMoveIndex] ?? null) : null,
+    lastCapture,
     goToStart,
     goBack,
     goForward,

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Position, Piece, Side } from '@/core/types';
+import { Position, Piece, Side, PieceType } from '@/core/types';
 import { PIECE_CHAR } from '@/lib/fen';
 
 // ─── 布局常量 ──────────────────────────────────────────────────────
@@ -24,14 +24,26 @@ function pt(row: number, col: number) {
 // ─── AI 提示颜色 ───────────────────────────────────────────────────
 
 const HINT_STYLE = [
-  { fill: 'rgba(34,197,94,0.28)',  stroke: '#22c55e' }, // #1 绿
-  { fill: 'rgba(234,179,8,0.28)',  stroke: '#eab308' }, // #2 黄
-  { fill: 'rgba(249,115,22,0.25)', stroke: '#f97316' }, // #3 橙
+  { fill: 'rgba(34,197,94,0.28)',  stroke: '#22c55e' },
+  { fill: 'rgba(234,179,8,0.28)',  stroke: '#eab308' },
+  { fill: 'rgba(249,115,22,0.25)', stroke: '#f97316' },
 ];
 
-// ─── 棋子圆形 (纯展示，无定位) ─────────────────────────────────────
+// ─── 棋子圆形 ──────────────────────────────────────────────────────
 
-function PieceCircle({ piece, isSelected, flipped }: { piece: Piece; isSelected: boolean; flipped?: boolean }) {
+const transition = 'left 0.28s cubic-bezier(0.25, 0.8, 0.25, 1), top 0.28s cubic-bezier(0.25, 0.8, 0.25, 1)';
+
+function PieceToken({
+  piece,
+  isSelected,
+  flipped,
+  inCheck,
+}: {
+  piece: Piece;
+  isSelected: boolean;
+  flipped?: boolean;
+  inCheck?: boolean;
+}) {
   const isRed = piece.side === Side.Red;
 
   return (
@@ -49,8 +61,11 @@ function PieceCircle({ piece, isSelected, flipped }: { piece: Piece; isSelected:
             ? '2px solid #b91c1c'
             : '2px solid #111827',
         boxShadow: isSelected
-          ? '0 0 14px rgba(251,191,36,0.8), 0 2px 6px rgba(0,0,0,0.5)'
-          : '0 2px 6px rgba(0,0,0,0.45)',
+          ? '0 0 18px rgba(251,191,36,0.9), 0 0 32px rgba(251,191,36,0.4), 0 4px 12px rgba(0,0,0,0.5)'
+          : inCheck
+            ? '0 0 16px rgba(239,68,68,0.8), 0 0 28px rgba(239,68,68,0.4), 0 2px 6px rgba(0,0,0,0.45)'
+            : '0 2px 6px rgba(0,0,0,0.45)',
+        animation: inCheck ? 'checkPulse 0.6s ease-in-out infinite' : undefined,
         transition: 'box-shadow 0.15s, border 0.15s',
         fontSize: 22,
         fontWeight: 700,
@@ -73,6 +88,16 @@ export interface AIHintDisplay {
   to: Position;
 }
 
+export interface MoveHighlight {
+  from: Position;
+  to: Position;
+}
+
+export interface CaptureEffect {
+  piece: Piece;
+  pos: Position;
+}
+
 export interface ChessboardProps {
   board: (Piece | null)[][];
   selectedPos: Position | null;
@@ -80,10 +105,14 @@ export interface ChessboardProps {
   aiHints: AIHintDisplay[];
   currentSide: Side;
   onCellClick: (row: number, col: number) => void;
-  /** 棋盘锁定：AI 思考中/非己方回合时阻止交互并显示遮罩 */
   boardLocked?: boolean;
-  /** 翻转棋盘（玩家执黑时黑方在底部） */
   flipped?: boolean;
+  /** 上一步走子起止点高亮 */
+  lastMove?: MoveHighlight | null;
+  /** 被吃棋子残影 */
+  lastCapture?: CaptureEffect | null;
+  /** 哪一方被将军 */
+  checkSide?: 'w' | 'b' | null;
 }
 
 // ─── 棋盘组件 ──────────────────────────────────────────────────────
@@ -97,9 +126,20 @@ export default function Chessboard({
   onCellClick,
   boardLocked = false,
   flipped = false,
+  lastMove,
+  lastCapture,
+  checkSide,
 }: ChessboardProps) {
-  // 快速查找集合
   const legalSet = new Set(legalMoves.map((m) => `${m.row},${m.col}`));
+
+  // 收集全部棋子供独立渲染（带稳定 key）
+  const pieceList: Array<{ piece: Piece; row: number; col: number }> = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const p = board[r]?.[c];
+      if (p) pieceList.push({ piece: p, row: r, col: c });
+    }
+  }
 
   return (
     <div
@@ -117,10 +157,8 @@ export default function Chessboard({
         height={BOARD_H}
         viewBox={`0 0 ${BOARD_W} ${BOARD_H}`}
       >
-        {/* 背景 */}
         <rect x={0} y={0} width={BOARD_W} height={BOARD_H} rx={8} fill="#f5deb3" />
 
-        {/* 外框 */}
         <rect
           x={PAD - 2} y={PAD - 2}
           width={(COLS - 1) * CELL + 4}
@@ -128,7 +166,6 @@ export default function Chessboard({
           fill="none" stroke="#b45309" strokeWidth={3} rx={2}
         />
 
-        {/* 横线 */}
         {Array.from({ length: ROWS }, (_, r) => (
           <line
             key={`h${r}`}
@@ -138,7 +175,6 @@ export default function Chessboard({
           />
         ))}
 
-        {/* 竖线: 左右边界贯通，内部在楚河汉界处断开 */}
         {[0, COLS - 1].map((c) => (
           <line
             key={`v${c}`}
@@ -162,7 +198,6 @@ export default function Chessboard({
           </React.Fragment>
         ))}
 
-        {/* 九宫斜线 */}
         {[
           [0, 3, 2, 5], [0, 5, 2, 3],
           [7, 3, 9, 5], [7, 5, 9, 3],
@@ -175,7 +210,6 @@ export default function Chessboard({
           />
         ))}
 
-        {/* 楚河汉界 */}
         <text
           x={PAD + 4 * CELL}
           y={PAD + 4.5 * CELL}
@@ -225,7 +259,37 @@ export default function Chessboard({
         })}
       </svg>
 
-      {/* ══════════════ Layer 2: AI 提示方块 ══════════════ */}
+      {/* ══════════════ Layer 2: 上一步高亮 ══════════════ */}
+      {lastMove && (
+        <>
+          <div
+            className="absolute rounded-lg pointer-events-none"
+            style={{
+              left: pt(lastMove.from.row, lastMove.from.col).x - PIECE_R,
+              top: pt(lastMove.from.row, lastMove.from.col).y - PIECE_R,
+              width: PIECE_R * 2,
+              height: PIECE_R * 2,
+              backgroundColor: 'rgba(250,204,21,0.25)',
+              border: '2px solid rgba(250,204,21,0.45)',
+              zIndex: 4,
+            }}
+          />
+          <div
+            className="absolute rounded-lg pointer-events-none"
+            style={{
+              left: pt(lastMove.to.row, lastMove.to.col).x - PIECE_R,
+              top: pt(lastMove.to.row, lastMove.to.col).y - PIECE_R,
+              width: PIECE_R * 2,
+              height: PIECE_R * 2,
+              backgroundColor: 'rgba(250,204,21,0.35)',
+              border: '2px solid rgba(250,204,21,0.6)',
+              zIndex: 4,
+            }}
+          />
+        </>
+      )}
+
+      {/* ══════════════ Layer 3: AI 提示方块 ══════════════ */}
       {aiHints.map((hint, i) => {
         const style = HINT_STYLE[Math.min(hint.multipv - 1, 2)];
         return (
@@ -258,7 +322,7 @@ export default function Chessboard({
         );
       })}
 
-      {/* ══════════════ Layer 3: 合法落点指示 ══════════════ */}
+      {/* ══════════════ Layer 4: 合法落点指示 ══════════════ */}
       {legalMoves.map((m) => {
         const { x, y } = pt(m.row, m.col);
         const occupied = board[m.row]?.[m.col] !== null;
@@ -279,40 +343,77 @@ export default function Chessboard({
         );
       })}
 
-      {/* ══════════════ Layer 4: 棋子 + 点击 ══════════════
-          每个交叉点仅一个绝对定位容器。
-          棋子 PieceCircle 不再做二次定位，避免坐标翻倍。 */}
+      {/* ══════════════ Layer 5: 棋子 (独立渲染 + 丝滑过渡) ══════════════ */}
+      {pieceList.map(({ piece, row, col }) => {
+        const { x, y } = pt(row, col);
+        const isSel = selectedPos?.row === row && selectedPos?.col === col;
+        const isKingInCheck =
+          checkSide !== null &&
+          checkSide !== undefined &&
+          piece.type === PieceType.King &&
+          ((piece.side === Side.Red && checkSide === 'w') ||
+           (piece.side === Side.Black && checkSide === 'b'));
+
+        return (
+          <div
+            key={piece.id ?? `${row}-${col}`}
+            className="absolute flex items-center justify-center"
+            style={{
+              left: x - PIECE_R,
+              top: y - PIECE_R,
+              width: PIECE_R * 2,
+              height: PIECE_R * 2,
+              zIndex: isSel ? 25 : 21,
+              transition,
+              pointerEvents: 'none',
+            }}
+          >
+            <PieceToken
+              piece={piece}
+              isSelected={isSel}
+              flipped={flipped}
+              inCheck={isKingInCheck}
+            />
+          </div>
+        );
+      })}
+
+      {/* ══════════════ Layer 6: 吃子残影 ══════════════ */}
+      {lastCapture && (
+        <div
+          className="absolute flex items-center justify-center pointer-events-none animate-capture-fade"
+          style={{
+            left: pt(lastCapture.pos.row, lastCapture.pos.col).x - PIECE_R,
+            top: pt(lastCapture.pos.row, lastCapture.pos.col).y - PIECE_R,
+            width: PIECE_R * 2,
+            height: PIECE_R * 2,
+            zIndex: 23,
+          }}
+        >
+          <PieceToken piece={lastCapture.piece} isSelected={false} flipped={flipped} />
+        </div>
+      )}
+
+      {/* ══════════════ Layer 7: 隐形点击区域 ══════════════ */}
       {Array.from({ length: ROWS }, (_, r) =>
         Array.from({ length: COLS }, (_, c) => {
           const { x, y } = pt(r, c);
           const piece = board[r]?.[c] ?? null;
-          const isSel = selectedPos?.row === r && selectedPos?.col === c;
           const isLegal = legalSet.has(`${r},${c}`);
-
           return (
             <div
-              key={`cell-${r}-${c}`}
-              className="absolute flex items-center justify-center"
+              key={`click-${r}-${c}`}
+              className="absolute rounded-full"
               style={{
                 left: x - PIECE_R,
                 top: y - PIECE_R,
                 width: PIECE_R * 2,
                 height: PIECE_R * 2,
-                zIndex: piece ? 21 : 12,
+                zIndex: 30,
                 cursor: piece || isLegal ? 'pointer' : 'default',
               }}
               onClick={() => onCellClick(r, c)}
-            >
-              {piece ? (
-                <PieceCircle piece={piece} isSelected={isSel} flipped={flipped} />
-              ) : (
-                /* 空交叉点的隐形点击区域 */
-                <div
-                  className="rounded-full"
-                  style={{ width: PIECE_R * 2, height: PIECE_R * 2 }}
-                />
-              )}
-            </div>
+            />
           );
         })
       )}
