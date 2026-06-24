@@ -16,6 +16,8 @@ import HomeScreen from '@/components/HomeScreen';
 import Toast from '@/components/Toast';
 import SaveModal from '@/components/SaveModal';
 import LoadModal from '@/components/LoadModal';
+import PlaybackController from '@/components/PlaybackController';
+import MoveList from '@/components/MoveList';
 
 /** AI 请求超时 */
 const AI_TIMEOUT_MS = 12_000;
@@ -404,6 +406,27 @@ export default function Home() {
           />
         )}
       </div>
+
+      {/* ── 练习模式: 棋谱回看 ── */}
+      {game.gameMode === 'practice' && (
+        <div className="w-full max-w-[552px] space-y-3">
+          <PlaybackController
+            currentMoveIndex={game.currentMoveIndex}
+            totalMoves={game.fenHistory.length - 1}
+            isReviewing={game.isReviewing}
+            onStart={game.goToStart}
+            onBack={game.goBack}
+            onForward={game.goForward}
+            onEnd={game.goToEnd}
+          />
+          <MoveList
+            fenHistory={game.fenHistory}
+            moveRecords={game.moveRecords}
+            currentMoveIndex={game.currentMoveIndex}
+            onJump={game.jumpToMove}
+          />
+        </div>
+      )}
 
       <ControlsPanel
         gameMode={game.gameMode}

@@ -36,6 +36,11 @@ export interface RestoreData {
   aiDepth: number;
 }
 
+export interface MoveRecord {
+  from: Position;
+  to: Position;
+}
+
 export interface UseChessGameReturn {
   // 核心状态
   board: Board;
@@ -63,6 +68,16 @@ export interface UseChessGameReturn {
   // 历史
   fenHistory: string[];
   canUndo: boolean;
+
+  // 时光机
+  currentMoveIndex: number;
+  isReviewing: boolean;
+  moveRecords: (MoveRecord | null)[];
+  goToStart: () => void;
+  goBack: () => void;
+  goForward: () => void;
+  goToEnd: () => void;
+  jumpToMove: (index: number) => void;
 
   // 操作
   setGameMode: (mode: GameMode) => void;
@@ -130,6 +145,10 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   // 玩家阵营（默认执红）
   const [playerSide, setPlayerSideState] = useState<Side>(Side.Red);
 
+  // 时光机
+  const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
+  const [moveRecords, setMoveRecords] = useState<(MoveRecord | null)[]>([null]);
+
   // Refs — 始终保持最新值，避免闭包过期
   const boardRef = useRef(board);
   const sideRef = useRef(currentSide);
@@ -140,6 +159,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   const isThinkingRef = useRef(isThinking);
   const winnerRef = useRef(winner);
   const playerSideRef = useRef(playerSide);
+  const currentMoveIndexRef = useRef(currentMoveIndex);
+  const moveRecordsRef = useRef(moveRecords);
 
   boardRef.current = board;
   sideRef.current = currentSide;
@@ -150,8 +171,10 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
   isThinkingRef.current = isThinking;
   winnerRef.current = winner;
   playerSideRef.current = playerSide;
+  currentMoveIndexRef.current = currentMoveIndex;
+  moveRecordsRef.current = moveRecords;
 
-  // ── 模式切换 (含重置) ─────────────────────────────────────────
+  // ── 模式切换 ─────────────────────────────────────────────────
 
   const setGameMode = useCallback((mode: GameMode) => {
     console.log('[hook] 切换模式 →', mode);
@@ -164,6 +187,64 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     console.log('[hook] 玩家阵营 →', side);
     setPlayerSideState(side);
   }, []);
+
+  // ── 位置恢复 (时光机核心) ──────────────────────────────────────
+
+  const restorePosition = useCallback((index: number) => {
+    const targetFen = fenHistoryRef.current[index];
+    if (!targetFen) return;
+
+    const { board: b, sideToMove: s } = fenToBoard(targetFen);
+
+    boardRef.current = b;
+    sideRef.current = s;
+    fenRef.current = targetFen;
+
+    setGameState({ board: b, side: s });
+    setFen(targetFen);
+    setCurrentMoveIndex(index);
+    setGameStatus(deriveStatus(b, s));
+    setSelectedPos(null);
+    setLegalMoves([]);
+    setCheckSide(isInCheck(b, s) ? turnChar(s) : null);
+
+    // 检测此位置是否为终局
+    if (isGameOver(b, s)) {
+      const prev = flipSide(s);
+      setWinner(turnChar(prev));
+    } else {
+      setWinner(null);
+    }
+  }, []);
+
+  // ── 时光机导航 ────────────────────────────────────────────────
+
+  const goToStart = useCallback(() => {
+    if (currentMoveIndexRef.current === 0) return;
+    restorePosition(0);
+  }, [restorePosition]);
+
+  const goBack = useCallback(() => {
+    if (currentMoveIndexRef.current <= 0) return;
+    restorePosition(currentMoveIndexRef.current - 1);
+  }, [restorePosition]);
+
+  const goForward = useCallback(() => {
+    if (currentMoveIndexRef.current >= fenHistoryRef.current.length - 1) return;
+    restorePosition(currentMoveIndexRef.current + 1);
+  }, [restorePosition]);
+
+  const goToEnd = useCallback(() => {
+    const last = fenHistoryRef.current.length - 1;
+    if (currentMoveIndexRef.current === last) return;
+    restorePosition(last);
+  }, [restorePosition]);
+
+  const jumpToMove = useCallback((index: number) => {
+    if (index < 0 || index >= fenHistoryRef.current.length) return;
+    if (index === currentMoveIndexRef.current) return;
+    restorePosition(index);
+  }, [restorePosition]);
 
   // ── 内部走子引擎 ─────────────────────────────────────────────
 
@@ -201,13 +282,41 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
         sideRef.current
       );
 
+      // ★ 时光分支: 如正在回看历史，截断未来记录
+      const cidx = currentMoveIndexRef.current;
+      const fullHistory = fenHistoryRef.current;
+
+      let newFenHistory: string[];
+      let newMoveRecords: (MoveRecord | null)[];
+
+      if (cidx < fullHistory.length - 1) {
+        // 截断: 保留 [0..cidx]，丢弃未来
+        newFenHistory = fullHistory.slice(0, cidx + 1);
+        newMoveRecords = moveRecordsRef.current.slice(0, cidx + 1);
+        console.log(`[hook] 时光分支截断: 丢弃步骤 ${cidx + 1}..${fullHistory.length - 1}`);
+      } else {
+        newFenHistory = fullHistory;
+        newMoveRecords = moveRecordsRef.current;
+      }
+
+      // 追加新步
+      newFenHistory = [...newFenHistory, newFen];
+      newMoveRecords = [...newMoveRecords, { from, to }];
+
+      const newIndex = newFenHistory.length - 1;
+
       boardRef.current = newBoard;
       sideRef.current = nextSide;
       fenRef.current = newFen;
+      fenHistoryRef.current = newFenHistory;
+      moveRecordsRef.current = newMoveRecords;
+      currentMoveIndexRef.current = newIndex;
 
       setGameState({ board: newBoard, side: nextSide });
       setFen(newFen);
-      setFenHistory((prev) => [...prev, newFen]);
+      setFenHistory(newFenHistory);
+      setMoveRecords(newMoveRecords);
+      setCurrentMoveIndex(newIndex);
       setGameStatus(status);
       setSelectedPos(null);
       setLegalMoves([]);
@@ -241,7 +350,11 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
         console.log('[hook] 点击被拦截: isThinking=true');
         return;
       }
-      if (gameStatusRef.current === 'gameover') return;
+      if (gameStatusRef.current === 'gameover' &&
+          currentMoveIndexRef.current === fenHistoryRef.current.length - 1) {
+        // 只在最后一步时拦截；回看历史时可自由选子
+        return;
+      }
 
       const currentBoard = boardRef.current;
       const side = sideRef.current;
@@ -294,21 +407,26 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
       if (history.length <= steps) return;
 
       const newHistory = history.slice(0, -steps);
+      const newRecords = moveRecordsRef.current.slice(0, -steps);
       const restoreFen = newHistory[newHistory.length - 1];
-
-      const { board: restoredBoard, sideToMove: restoredSide } =
-        fenToBoard(restoreFen);
+      const { board: restoredBoard, sideToMove: restoredSide } = fenToBoard(restoreFen);
 
       console.log(`[hook] 悔棋 ${steps} 步 → side=${turnChar(restoredSide)}`);
+
+      const newIndex = newHistory.length - 1;
 
       boardRef.current = restoredBoard;
       sideRef.current = restoredSide;
       fenRef.current = restoreFen;
       fenHistoryRef.current = newHistory;
+      moveRecordsRef.current = newRecords;
+      currentMoveIndexRef.current = newIndex;
 
       setGameState({ board: restoredBoard, side: restoredSide });
       setFen(restoreFen);
       setFenHistory(newHistory);
+      setMoveRecords(newRecords);
+      setCurrentMoveIndex(newIndex);
       setGameStatus(deriveStatus(restoredBoard, restoredSide));
       setSelectedPos(null);
       setLegalMoves([]);
@@ -329,10 +447,15 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     boardRef.current = b;
     sideRef.current = s;
     fenRef.current = startFen;
+    fenHistoryRef.current = [startFen];
+    moveRecordsRef.current = [null];
+    currentMoveIndexRef.current = 0;
 
     setGameState({ board: b, side: s });
     setFen(startFen);
     setFenHistory([startFen]);
+    setMoveRecords([null]);
+    setCurrentMoveIndex(0);
     setGameStatus('playing');
     setSelectedPos(null);
     setLegalMoves([]);
@@ -349,7 +472,6 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     const mode = gameModeRef.current;
     if (mode !== 'battle') return;
 
-    // AI 获胜 = 非玩家阵营
     const aiSide = playerSideRef.current === Side.Red ? Side.Black : Side.Red;
     const aiWinner = turnChar(aiSide);
     console.log('[hook] 认输 → 胜者:', aiWinner);
@@ -362,7 +484,6 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
 
   const offerDraw = useCallback((): boolean => {
     if (gameStatusRef.current === 'gameover') return false;
-    // 80% 概率同意
     const accepted = Math.random() < 0.8;
     console.log('[hook] 求和 →', accepted ? '同意' : '拒绝');
     if (accepted) {
@@ -380,14 +501,20 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
 
     console.log('[hook] 读档恢复 → side=', turnChar(restoredSide));
 
+    const lastIdx = data.fenHistory.length - 1;
+
     boardRef.current = restoredBoard;
     sideRef.current = restoredSide;
     fenRef.current = data.fen;
     fenHistoryRef.current = data.fenHistory;
+    moveRecordsRef.current = new Array(data.fenHistory.length).fill(null);
+    currentMoveIndexRef.current = lastIdx;
 
     setGameState({ board: restoredBoard, side: restoredSide });
     setFen(data.fen);
     setFenHistory(data.fenHistory);
+    setMoveRecords(new Array(data.fenHistory.length).fill(null));
+    setCurrentMoveIndex(lastIdx);
     setGameModeState(data.gameMode);
     setPlayerSideState(data.playerSide);
     setAiDepth(data.aiDepth);
@@ -412,6 +539,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     gameMode === 'battle' || gameMode === 'coach' ? 2 : 1;
   const canUndo = fenHistory.length > minHistory;
 
+  const isReviewing = currentMoveIndex < fenHistory.length - 1;
+
   return {
     board,
     fen,
@@ -430,6 +559,14 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     legalMoves,
     fenHistory,
     canUndo,
+    currentMoveIndex,
+    isReviewing,
+    moveRecords,
+    goToStart,
+    goBack,
+    goForward,
+    goToEnd,
+    jumpToMove,
     setGameMode,
     setAiDepth,
     setIsThinking,
