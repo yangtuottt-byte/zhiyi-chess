@@ -356,11 +356,10 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
         setTimeout(() => audio.playCheck(), 150);
       }
       if (result) {
-        setTimeout(() => audio.playGameOver(), 300);
-      }
-
-      if (result) {
-        setWinner(turnChar(flipSide(nextSide)));
+        const victor = turnChar(flipSide(nextSide));
+        const isPlayerWin = victor === turnChar(playerSideRef.current);
+        setTimeout(() => audio.playGameOver(isPlayerWin ? 'win' : 'lose'), 300);
+        setWinner(victor);
       }
       setCheckSide(inCheck ? turnChar(nextSide) : null);
     },
@@ -504,7 +503,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     console.log('[hook] 认输 → 胜者:', aiWinner);
     setWinner(aiWinner);
     setGameStatus('gameover');
-    audio.playGameOver();
+    audio.playGameOver('lose');
   }, []);
 
   // ── 求和 ──────────────────────────────────────────────────────
@@ -516,7 +515,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     if (accepted) {
       setWinner('draw');
       setGameStatus('gameover');
-      setTimeout(() => audio.playGameOver(), 200);
+      setTimeout(() => audio.playGameOver('draw'), 200);
     }
     return accepted;
   }, []);

@@ -25,7 +25,7 @@ export function useSound() {
   const playMove = useCallback(() => audio.playMove(), []);
   const playCapture = useCallback(() => audio.playCapture(), []);
   const playCheck = useCallback(() => audio.playCheck(), []);
-  const playGameOver = useCallback(() => audio.playGameOver(), []);
+  const playGameOver = useCallback((status: 'win' | 'lose' | 'draw') => audio.playGameOver(status), []);
   const playUI = useCallback(() => audio.playUI(), []);
 
   return { isEnabled, toggle, playMove, playCapture, playCheck, playGameOver, playUI };

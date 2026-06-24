@@ -5,7 +5,10 @@
  *   move.mp3     — 普通走子
  *   capture.mp3  — 吃子
  *   check.mp3    — 将军
- *   gameover.mp3 — 终局
+ *   win.mp3      — 胜利
+ *   lose.mp3     — 失败
+ *   draw.mp3     — 和棋
+ *   gameover.mp3 — 终局（通用后备）
  *   ui.mp3       — UI 交互
  *
  * 文件缺失时静默降级，不会报错。
@@ -13,7 +16,8 @@
  * 设置持久化到 localStorage → ZhiYi_Settings.soundEnabled
  */
 
-type SoundName = 'move' | 'capture' | 'check' | 'gameover' | 'ui';
+type SoundName = 'move' | 'capture' | 'check' | 'gameover' | 'ui' | 'win' | 'lose' | 'draw';
+type GameOverStatus = 'win' | 'lose' | 'draw';
 type ChangeListener = (enabled: boolean) => void;
 
 const SETTINGS_KEY = 'ZhiYi_Settings';
@@ -70,6 +74,9 @@ class AudioManager {
     this.init('move', '/sounds/move.mp3');
     this.init('capture', '/sounds/capture.mp3');
     this.init('check', '/sounds/check.mp3', 2);
+    this.init('win', '/sounds/win.mp3', 2);
+    this.init('lose', '/sounds/lose.mp3', 2);
+    this.init('draw', '/sounds/draw.mp3', 2);
     this.init('gameover', '/sounds/gameover.mp3', 2);
     this.init('ui', '/sounds/ui.mp3', 2);
   }
@@ -94,8 +101,10 @@ class AudioManager {
   playMove(): void     { this.play('move'); }
   playCapture(): void  { this.play('capture'); }
   playCheck(): void    { this.play('check'); }
-  playGameOver(): void { this.play('gameover'); }
   playUI(): void       { this.play('ui'); }
+  playGameOver(status: GameOverStatus = 'lose'): void {
+    this.play(status);
+  }
 
   // ── 开关 ────────────────────────────────────────────────────
 
