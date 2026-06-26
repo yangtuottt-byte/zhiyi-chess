@@ -101,9 +101,14 @@ export function parseIccsToFenHistory(iccsMoves: string): string[] {
   return fenHistory;
 }
 
-/** 同时返回 fenHistory 与每一步的 from/to 记录, 供 MoveList 高亮使用. */
+/** 同时返回 fenHistory / boardHistory / 每一步的 from/to 记录, 供 MoveList 高亮使用. */
 export interface ParsedRecord {
   fenHistory: string[];
+  /**
+   * 与 fenHistory 同长. 每个 board 都是从 START 位置开始, 通过移动 *同一个* 棋子对象引用
+   * 推演而来 → piece.id 在整段历史中保持稳定, 直接喂给 React reconciliation 不会瞬移.
+   */
+  boardHistory: Board[];
   /** 与 fenHistory 同长, [0] 为 null (代表开局), [i] 为产生 fenHistory[i] 的那一步. */
   moveRecords: ({ from: Position; to: Position } | null)[];
   /** 成功推演的步数 (= moveRecords.length - 1) */
@@ -113,8 +118,9 @@ export interface ParsedRecord {
 }
 
 /**
- * 与 parseIccsToFenHistory 同样的推演逻辑, 但顺便返回每一步的 from/to 记录.
- * 推荐前端联动时使用这个: 既能装载 fenHistory, 又能让 MoveList / lastMove 高亮工作.
+ * 与 parseIccsToFenHistory 同样的推演逻辑, 但顺便返回每一步的 board / from/to 记录.
+ * 推荐前端联动时使用这个: 既能装载 fenHistory, 又能让 MoveList / lastMove 高亮工作,
+ * 同时 boardHistory 保证 piece.id 全程稳定 (修复"棋子瞬移" bug 必备).
  */
 export function parseIccsToGameRecord(iccsMoves: string): ParsedRecord {
   const tokens = (iccsMoves ?? '')
@@ -122,14 +128,18 @@ export function parseIccsToGameRecord(iccsMoves: string): ParsedRecord {
     .map((t) => t.trim())
     .filter(Boolean);
 
+  // 初始局面: 唯一一次调用 fenToBoard 生成稳定 ID, 后续全部通过引用推演
+  const { board: initialBoard } = fenToBoard(START_FEN);
   const fenHistory: string[] = [START_FEN];
+  const boardHistory: Board[] = [initialBoard];
   const moveRecords: ({ from: Position; to: Position } | null)[] = [null];
 
   if (tokens.length === 0) {
-    return { fenHistory, moveRecords, movesParsed: 0, movesTotal: 0 };
+    return { fenHistory, boardHistory, moveRecords, movesParsed: 0, movesTotal: 0 };
   }
 
-  let { board, sideToMove: side } = fenToBoard(START_FEN);
+  let board = initialBoard;
+  let side: Side = fenToBoard(START_FEN).sideToMove;
 
   for (let i = 0; i < tokens.length; i++) {
     const tok = tokens[i];
@@ -150,11 +160,13 @@ export function parseIccsToGameRecord(iccsMoves: string): ParsedRecord {
     board = stepped.newBoard;
     side = stepped.nextSide;
     fenHistory.push(boardToFen(board, side));
+    boardHistory.push(board);
     moveRecords.push({ from: parsed.from, to: parsed.to });
   }
 
   return {
     fenHistory,
+    boardHistory,
     moveRecords,
     movesParsed: fenHistory.length - 1,
     movesTotal: tokens.length,

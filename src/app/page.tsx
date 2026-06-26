@@ -304,16 +304,23 @@ export default function Home() {
       setAiResult(null);
       setError(null);
 
-      game.loadGameRecord(parsed.fenHistory, parsed.moveRecords, {
-        recordId: record.id,
-        event: record.event,
-        redPlayer: record.red_player,
-        blackPlayer: record.black_player,
-        redTeam: record.red_team,
-        blackTeam: record.black_team,
-        result: record.result,
-        opening: record.opening,
-      });
+      game.loadGameRecord(
+        parsed.fenHistory,
+        parsed.moveRecords,
+        {
+          recordId: record.id,
+          event: record.event,
+          redPlayer: record.red_player,
+          blackPlayer: record.black_player,
+          redTeam: record.red_team,
+          blackTeam: record.black_team,
+          result: record.result,
+          opening: record.opening,
+        },
+        // ★ parser 已用引用推演出 boardHistory, piece.id 全程稳定 — 直接交给 hook,
+        //   省去重推 + 保证装载后做时光机也不会瞬移.
+        parsed.boardHistory,
+      );
 
       setCurrentView('game');
 

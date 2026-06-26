@@ -15,11 +15,19 @@ export enum Side {
   Black = 'black',
 }
 
-/** 棋子 */
+/** 棋子 — id 为全局稳定唯一标识, 贯穿整局游戏不变, React 用作 reconciliation key. */
 export interface Piece {
   type: PieceType;
   side: Side;
-  id?: string; // 稳定 ID 用于 React 动画 key
+  /**
+   * 全局唯一稳定 ID, 形如 "red-pawn-3".
+   * ★ 关键不变量: 此 ID 在棋子的整个生命周期内 (从创建到被吃) 不得变更.
+   *   - 创建时机: 仅在 fenToBoard / createInitialBoard 初始化 *初始局面* 时生成.
+   *   - 走子: 通过移动对象引用本身来保留 id (newBoard[to] = newBoard[from]).
+   *   - 严禁在中间局面 (复盘 / 悔棋 / 跳步) 重新调用 fenToBoard 拿到新 id, 否则
+   *     React key 错乱将导致"棋子瞬移"动画 bug.
+   */
+  id: string;
 }
 
 /** 棋盘坐标 */

@@ -349,7 +349,20 @@ export default function Chessboard({
       })}
 
       {/* ══════════════ Layer 5: 棋子 (独立渲染 + 丝滑过渡) ══════════════ */}
+      {/*
+        ★ React key 必须使用 piece.id (整局稳定的全局唯一 ID).
+        ★ 严禁回退到 row-col 或数组索引 — 那会让 React 误把"位置"当作身份,
+          导致两枚同类棋子的 DOM 节点错乱, 动画飞错目标.
+      */}
       {pieceList.map(({ piece, row, col }) => {
+        if (!piece.id) {
+          // 这是开发期不变量违规 — 任何 Piece 都应在创建时设置 id
+          console.error(
+            `[Chessboard] 棋子缺少稳定 id (row=${row} col=${col} ${piece.side}-${piece.type}), ` +
+            `React reconciliation 将退化为按位置匹配, 动画可能错乱.`
+          );
+        }
+
         const { x, y } = pt(row, col);
         const isSel = selectedPos?.row === row && selectedPos?.col === col;
         const isKingInCheck =
@@ -361,7 +374,7 @@ export default function Chessboard({
 
         return (
           <div
-            key={piece.id ?? `${row}-${col}`}
+            key={piece.id}
             className="absolute flex items-center justify-center"
             style={{
               left: x - PIECE_R,
