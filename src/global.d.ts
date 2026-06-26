@@ -4,6 +4,34 @@
  * 确保 Next.js 和 TypeScript 在整个项目中都能识别 window.api。
  */
 
+interface RecordSummary {
+  id: number;
+  event: string | null;
+  red_team: string | null;
+  red_player: string | null;
+  black_team: string | null;
+  black_player: string | null;
+  result: string | null;
+  opening: string | null;
+}
+
+interface RecordWithMoves extends RecordSummary {
+  moves: string;
+}
+
+interface SearchRecordsOptions {
+  keyword?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+interface SearchRecordsResult {
+  data: RecordSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 interface Window {
   api: {
     analyzePosition(fen: string, options?: { depth?: number; movetime?: number }): Promise<{
@@ -23,5 +51,7 @@ interface Window {
       ready: boolean;
       enginePath: string;
     }>;
+    searchRecords(opts?: SearchRecordsOptions): Promise<SearchRecordsResult>;
+    getRecordMoves(id: number): Promise<RecordWithMoves | null>;
   };
 }

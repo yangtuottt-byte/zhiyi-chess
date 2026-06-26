@@ -13,6 +13,7 @@ import SettingsModal from '@/components/SettingsModal';
 
 export interface HomeScreenProps {
   onStartGame: (mode: GameMode, difficulty: AIDifficulty, playerSide: Side) => void;
+  onOpenLibrary: () => void;
 }
 
 interface ModeCard {
@@ -59,7 +60,7 @@ const DIFFICULTY_OPTIONS: Array<{
   { key: 'hard', label: '困难', desc: '深度思考，挑战极限', icon: '👑', color: 'red' },
 ];
 
-export default function HomeScreen({ onStartGame }: HomeScreenProps) {
+export default function HomeScreen({ onStartGame, onOpenLibrary }: HomeScreenProps) {
   const [selected, setSelected] = useState<GameMode>('practice');
   const [difficulty, setDifficulty] = useState<AIDifficulty>('medium');
   const [playerSide, setPlayerSide] = useState<Side>(Side.Red);
@@ -212,6 +213,39 @@ export default function HomeScreen({ onStartGame }: HomeScreenProps) {
             );
           })}
         </div>
+
+        {/* ── 棋谱大厅入口 (独立路由, 不参与开始对局流程) ── */}
+        <button
+          onClick={() => { playUI(); onOpenLibrary(); }}
+          className="group relative flex w-full max-w-3xl items-center gap-5 overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-r from-cyan-500/5 via-sky-500/5 to-indigo-500/5 px-6 py-5 text-left backdrop-blur-md transition-all duration-300 ease-out hover:-translate-y-2 hover:border-cyan-400/40 hover:from-cyan-500/10 hover:via-sky-500/10 hover:to-indigo-500/10 hover:shadow-2xl hover:shadow-cyan-500/10"
+        >
+          {/* 光晕扫过 */}
+          <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent transition-transform duration-1000 group-hover:translate-x-full" />
+
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-3xl shadow-inner shadow-cyan-500/10 transition-all duration-300 group-hover:bg-cyan-500/20">
+            📚
+          </div>
+
+          <div className="relative z-10 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xl font-bold tracking-wide text-cyan-300 transition-colors duration-300 group-hover:text-cyan-200">
+                棋谱大厅
+              </h3>
+              <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-cyan-300/80">
+                Game Library
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-500 transition-colors duration-300 group-hover:text-slate-400">
+              检索 4 万+ 大师对局 · 拼音搜索 · 一键回放
+            </p>
+          </div>
+
+          <div className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-500/30 text-cyan-400 transition-all duration-300 group-hover:border-cyan-400 group-hover:bg-cyan-500/10 group-hover:translate-x-1">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </button>
 
         {/* ── 开始按钮 ── */}
         <button

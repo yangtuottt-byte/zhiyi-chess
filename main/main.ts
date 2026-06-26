@@ -1,6 +1,13 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { UCIEngine } from './engine';
+import {
+  initDatabase,
+  closeDatabase,
+  searchRecords,
+  getRecordMoves,
+  type SearchOptions,
+} from './db';
 
 const isDev = !app.isPackaged;
 
@@ -94,11 +101,46 @@ function registerIPC(): void {
       enginePath: getEnginePath(),
     };
   });
+
+  /**
+   * 棋谱列表分页搜索
+   * 前端调用: window.api.searchRecords({ keyword, page, pageSize })
+   * 返回: { data, total, page, pageSize }
+   */
+  ipcMain.handle('records:search', async (_event, opts: SearchOptions = {}) => {
+    try {
+      return searchRecords(opts ?? {});
+    } catch (err: any) {
+      console.error('[main] records:search 失败:', err.message);
+      throw err;
+    }
+  });
+
+  /**
+   * 获取单局完整数据 (含 moves)
+   * 前端调用: window.api.getRecordMoves(id)
+   * 返回: RecordWithMoves | null
+   */
+  ipcMain.handle('records:get-moves', async (_event, id: number) => {
+    try {
+      return getRecordMoves(id);
+    } catch (err: any) {
+      console.error('[main] records:get-moves 失败:', err.message);
+      throw err;
+    }
+  });
 }
 
 // ── 生命周期 ───────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  try {
+    initDatabase();
+  } catch (err) {
+    console.error('[main] 数据库初始化失败:', err);
+    // 不阻塞引擎与 UI: 棋谱功能在前端会因 IPC 报错而提示不可用
+  }
+
   registerIPC();
   createWindow();
   await startEngine();
@@ -116,12 +158,13 @@ app.on('window-all-closed', () => {
   }
 });
 
-// 退出前强制杀死引擎子进程，防止僵尸进程
+// 退出前强制杀死引擎子进程, 防止僵尸进程
 app.on('before-quit', () => {
   if (engine) {
     engine.kill();
     engine = null;
   }
+  closeDatabase();
 });
 
 app.on('will-quit', () => {
@@ -129,4 +172,5 @@ app.on('will-quit', () => {
     engine.kill();
     engine = null;
   }
+  closeDatabase();
 });

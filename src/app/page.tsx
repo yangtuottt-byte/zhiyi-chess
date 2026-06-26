@@ -14,6 +14,7 @@ import Chessboard from '@/components/Chessboard';
 import ControlsPanel from '@/components/ControlsPanel';
 import GameOverModal from '@/components/GameOverModal';
 import HomeScreen from '@/components/HomeScreen';
+import GameLibrary from '@/components/GameLibrary';
 import Toast from '@/components/Toast';
 import SaveModal from '@/components/SaveModal';
 import LoadModal from '@/components/LoadModal';
@@ -44,7 +45,7 @@ function buildSyncedFen(
 
 export default function Home() {
   // ── 视图路由 ─────────────────────────────────────────────────
-  const [currentView, setCurrentView] = useState<'home' | 'game'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'game' | 'library'>('home');
 
   // ── Electron / 游戏状态 ──────────────────────────────────────
   const { isElectron, envChecked, analyzePosition, getEngineStatus } = useElectron();
@@ -379,7 +380,16 @@ export default function Home() {
   // ═══════════════════════════════════════════════════════════════
 
   if (currentView === 'home') {
-    return <HomeScreen onStartGame={handleStartGame} />;
+    return (
+      <HomeScreen
+        onStartGame={handleStartGame}
+        onOpenLibrary={() => setCurrentView('library')}
+      />
+    );
+  }
+
+  if (currentView === 'library') {
+    return <GameLibrary onBack={() => setCurrentView('home')} />;
   }
 
   return (
