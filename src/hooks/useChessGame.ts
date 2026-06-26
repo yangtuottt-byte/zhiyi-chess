@@ -49,6 +49,18 @@ export interface RestoreData {
   aiDifficulty: AIDifficulty;
 }
 
+/** 棋谱元数据 — 用于在 UI 上展示真实选手 / 赛事名 */
+export interface GameRecordMeta {
+  recordId?: number;
+  event?: string | null;
+  redPlayer?: string | null;
+  blackPlayer?: string | null;
+  redTeam?: string | null;
+  blackTeam?: string | null;
+  result?: string | null;
+  opening?: string | null;
+}
+
 export interface MoveRecord {
   from: Position;
   to: Position;
@@ -111,6 +123,14 @@ export interface UseChessGameReturn {
   // 存档恢复
   restoreFromSave: (data: RestoreData) => void;
 
+  // 棋谱装载 (来自数据库 ICCS 推演结果)
+  recordMeta: GameRecordMeta | null;
+  loadGameRecord: (
+    fenHistory: string[],
+    moveRecords?: (MoveRecord | null)[],
+    metaData?: GameRecordMeta
+  ) => void;
+
   /** 供 useEffect 驱动的 AI 自动落子调用 */
   executeMove: (from: Position, to: Position) => void;
 }
@@ -166,6 +186,9 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
 
   // 视觉反馈
   const [lastCapture, setLastCapture] = useState<{ piece: Piece; pos: Position } | null>(null);
+
+  // 棋谱元数据
+  const [recordMeta, setRecordMeta] = useState<GameRecordMeta | null>(null);
 
   // Refs — 始终保持最新值，避免闭包过期
   const boardRef = useRef(board);
@@ -493,6 +516,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setCheckSide(null);
     setWinner(null);
     setLastCapture(null);
+    setRecordMeta(null);
   }, [startFen]);
 
   // ── 认输 ──────────────────────────────────────────────────────
@@ -558,7 +582,64 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setCheckSide(null);
     setWinner(null);
     setLastCapture(null);
+    setRecordMeta(null);
   }, []);
+
+  // ── 棋谱装载 (来自数据库, 已被 pgnParser 推演) ─────────────────
+
+  const loadGameRecord = useCallback(
+    (
+      fenHistoryArg: string[],
+      moveRecordsArg?: (MoveRecord | null)[],
+      metaData?: GameRecordMeta
+    ) => {
+      if (!fenHistoryArg || fenHistoryArg.length === 0) {
+        console.warn('[hook] loadGameRecord 收到空 fenHistory, 已忽略');
+        return;
+      }
+
+      // 首帧 = 开局, 进入打谱模式后玩家自己点"下一步"播放
+      const targetIndex = 0;
+      const targetFen = fenHistoryArg[targetIndex];
+      const { board: b, sideToMove: s } = fenToBoard(targetFen);
+
+      // moveRecords 长度需与 fenHistory 对齐; 缺失则填 null
+      const records: (MoveRecord | null)[] =
+        moveRecordsArg && moveRecordsArg.length === fenHistoryArg.length
+          ? moveRecordsArg.slice()
+          : new Array(fenHistoryArg.length).fill(null);
+
+      console.log(
+        `[hook] loadGameRecord → ${fenHistoryArg.length - 1} 步, ` +
+        `meta=${metaData ? `${metaData.redPlayer ?? '?'} vs ${metaData.blackPlayer ?? '?'}` : 'none'}`
+      );
+
+      boardRef.current = b;
+      sideRef.current = s;
+      fenRef.current = targetFen;
+      fenHistoryRef.current = fenHistoryArg;
+      moveRecordsRef.current = records;
+      currentMoveIndexRef.current = targetIndex;
+      gameModeRef.current = 'practice';
+
+      setGameState({ board: b, side: s });
+      setFen(targetFen);
+      setFenHistory(fenHistoryArg);
+      setMoveRecords(records);
+      setCurrentMoveIndex(targetIndex);
+      setGameModeState('practice'); // 强制打谱模式
+      setGameStatus(deriveStatus(b, s));
+      setSelectedPos(null);
+      setLegalMoves([]);
+      setAiHints([]);
+      setIsThinking(false);
+      setCheckSide(null);
+      setWinner(null);
+      setLastCapture(null);
+      setRecordMeta(metaData ?? null);
+    },
+    []
+  );
 
   // ── AI 提示 ─────────────────────────────────────────────────────
 
@@ -613,6 +694,8 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     resign,
     offerDraw,
     restoreFromSave,
+    recordMeta,
+    loadGameRecord,
     executeMove,
   };
 }

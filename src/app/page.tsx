@@ -8,6 +8,7 @@ import { useSaveManager } from '@/hooks/useSaveManager';
 import { useSettings } from '@/hooks/useSettings';
 import { uciToPositions } from '@/lib/uci';
 import { boardToFen } from '@/lib/fen';
+import { parseIccsToGameRecord } from '@/lib/pgnParser';
 import { Side } from '@/core/types';
 import type { SaveSlot } from '@/lib/storage';
 import Chessboard from '@/components/Chessboard';
@@ -278,6 +279,60 @@ export default function Home() {
     setCurrentView('home');
   }, [game]);
 
+  // ── 棋谱大厅: 选中一局棋谱 ─────────────────────────────────
+  //
+  // 流程: ICCS 串 → pgnParser 推演为 FEN 历史 + moveRecords
+  //       → game.loadGameRecord 装载状态 (强制 practice 模式, index=0)
+  //       → 视图切换回 'game', 玩家可使用 PlaybackController 播放
+  //
+  // 推演被截断 (棋谱含非法/不可解析步) 时给出 Toast 提示, 但仍装载前缀部分.
+  const handlePlayRecord = useCallback(
+    (record: RecordWithMoves) => {
+      console.log(`[page] 装载棋谱 #${record.id} "${record.event ?? ''}"`);
+      const parsed = parseIccsToGameRecord(record.moves);
+
+      if (parsed.movesParsed === 0) {
+        setToast({ message: '棋谱解析失败: 走法串为空或全部非法', type: 'error' });
+        return;
+      }
+
+      // 重置所有 AI 守卫, 防止 effect 在装载瞬间误触发
+      autoMoveGuard.current = false;
+      coachHintGuard.current = false;
+      lastCoachFenRef.current = '';
+      resignedRef.current = false;
+      setAiResult(null);
+      setError(null);
+
+      game.loadGameRecord(parsed.fenHistory, parsed.moveRecords, {
+        recordId: record.id,
+        event: record.event,
+        redPlayer: record.red_player,
+        blackPlayer: record.black_player,
+        redTeam: record.red_team,
+        blackTeam: record.black_team,
+        result: record.result,
+        opening: record.opening,
+      });
+
+      setCurrentView('game');
+
+      // 推演不完整时, 提示用户但不阻塞 (已装载前缀部分)
+      if (parsed.movesParsed < parsed.movesTotal) {
+        setToast({
+          message: `棋谱推演至第 ${parsed.movesParsed}/${parsed.movesTotal} 步遇到异常, 已加载前缀`,
+          type: 'info',
+        });
+      } else {
+        setToast({
+          message: `已装载棋谱 · 共 ${parsed.movesParsed} 步, 点击 ▶ 开始复盘`,
+          type: 'success',
+        });
+      }
+    },
+    [game]
+  );
+
   // ── 新局 ────────────────────────────────────────────────────
 
   const handleReset = useCallback(() => {
@@ -389,7 +444,12 @@ export default function Home() {
   }
 
   if (currentView === 'library') {
-    return <GameLibrary onBack={() => setCurrentView('home')} />;
+    return (
+      <GameLibrary
+        onBack={() => setCurrentView('home')}
+        onPlayRecord={handlePlayRecord}
+      />
+    );
   }
 
   return (
@@ -397,6 +457,37 @@ export default function Home() {
       <h1 className="text-lg font-bold text-amber-400 tracking-widest">
         智弈
       </h1>
+
+      {/* ── 棋谱元数据条 (仅当从棋谱大厅装载时显示) ── */}
+      {game.recordMeta && (
+        <div className="w-full max-w-[552px] rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] px-4 py-2 backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="truncate text-slate-400">
+              {game.recordMeta.event ?? <span className="italic text-slate-600">未署赛事</span>}
+            </span>
+            <span className="shrink-0 font-mono text-[10px] text-slate-600">
+              #{game.recordMeta.recordId}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-3 text-sm">
+            <span className="truncate text-red-300/90">
+              红 · {game.recordMeta.redPlayer ?? '—'}
+              {game.recordMeta.redTeam && (
+                <span className="ml-1 text-[11px] text-slate-600">({game.recordMeta.redTeam})</span>
+              )}
+            </span>
+            <span className="shrink-0 font-mono text-xs text-amber-400">
+              {game.recordMeta.result ?? '?'}
+            </span>
+            <span className="truncate text-right text-slate-200">
+              {game.recordMeta.blackPlayer ?? '—'} · 黑
+              {game.recordMeta.blackTeam && (
+                <span className="ml-1 text-[11px] text-slate-600">({game.recordMeta.blackTeam})</span>
+              )}
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="relative rounded-xl bg-amber-950/20 p-3 shadow-2xl">
         <Chessboard

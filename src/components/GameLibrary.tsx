@@ -9,6 +9,8 @@ import { audio } from '@/lib/audio';
 
 interface GameLibraryProps {
   onBack: () => void;
+  /** 用户选中某局棋谱时调用. 父组件负责 parseIccs + loadGameRecord + 视图切换. */
+  onPlayRecord: (record: RecordWithMoves) => void;
 }
 
 const PAGE_SIZE = 15;
@@ -45,7 +47,7 @@ function ResultPill({ result }: { result: string | null }) {
 //  组件主体
 // ──────────────────────────────────────────────────────────────────────
 
-export default function GameLibrary({ onBack }: GameLibraryProps) {
+export default function GameLibrary({ onBack, onPlayRecord }: GameLibraryProps) {
   const [keywordInput, setKeywordInput] = useState('');          // 输入框即时值
   const [keyword, setKeyword] = useState('');                    // 防抖后用于查询
   const [page, setPage] = useState(1);
@@ -54,6 +56,8 @@ export default function GameLibrary({ onBack }: GameLibraryProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rowLoadingId, setRowLoadingId] = useState<number | null>(null);
+  /** 加载某盘棋谱期间锁定整个列表, 防止重复点击触发并发请求. */
+  const isLoadingRef = useRef(false);
 
   // ── 防抖: 输入停 300ms 后才更新 keyword + 重置页码 ──
   useEffect(() => {
@@ -108,6 +112,8 @@ export default function GameLibrary({ onBack }: GameLibraryProps) {
   // ── 行点击: 取 moves 字符串 ──
   const handleRowClick = useCallback(async (rec: RecordSummary) => {
     if (typeof window === 'undefined' || !window.api?.getRecordMoves) return;
+    if (isLoadingRef.current) return; // 全局加载锁: 屏蔽并发
+    isLoadingRef.current = true;
     audio.playUI();
     setRowLoadingId(rec.id);
     try {
@@ -116,30 +122,19 @@ export default function GameLibrary({ onBack }: GameLibraryProps) {
         alert(`未找到 id=${rec.id} 的棋谱`);
         return;
       }
-      console.log('[GameLibrary] 棋谱加载完成', {
-        id: data.id,
-        event: data.event,
-        red: data.red_player,
-        black: data.black_player,
-        result: data.result,
-        moves: data.moves,
-      });
-      console.log('[GameLibrary] ICCS 走法:\n' + data.moves);
-      alert(
-        `正在为您加载这盘棋谱...\n\n` +
-        `赛事: ${data.event ?? '—'}\n` +
-        `红方: ${data.red_player ?? '—'}\n` +
-        `黑方: ${data.black_player ?? '—'}\n` +
-        `结果: ${data.result ?? '—'}\n` +
-        `走法步数: ${data.moves.split(/\s+/).filter(Boolean).length}`
+      console.log(
+        `[GameLibrary] 棋谱 #${data.id} 加载完成, 共 ${data.moves.split(/\s+/).filter(Boolean).length} 步`
       );
+      // 交给父组件: parseIccs + loadGameRecord + 路由跳转
+      onPlayRecord(data);
     } catch (e: any) {
       console.error('[GameLibrary] getRecordMoves 失败:', e);
       alert('加载失败: ' + (e?.message ?? e));
     } finally {
       setRowLoadingId(null);
+      isLoadingRef.current = false;
     }
-  }, []);
+  }, [onPlayRecord]);
 
   // ── 分页 ──
   const goPrev = () => { if (!isFirstPage) { audio.playUI(); setPage((p) => p - 1); } };
