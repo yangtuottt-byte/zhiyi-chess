@@ -15,6 +15,7 @@ import Chessboard from '@/components/Chessboard';
 import ControlsPanel from '@/components/ControlsPanel';
 import GameOverModal from '@/components/GameOverModal';
 import HomeScreen from '@/components/HomeScreen';
+import BoardEditor from '@/components/BoardEditor';
 import GameLibrary from '@/components/GameLibrary';
 import Toast from '@/components/Toast';
 import SaveModal from '@/components/SaveModal';
@@ -46,7 +47,7 @@ function buildSyncedFen(
 
 export default function Home() {
   // ── 视图路由 ─────────────────────────────────────────────────
-  const [currentView, setCurrentView] = useState<'home' | 'game' | 'library'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'game' | 'library' | 'editor'>('home');
 
   // ── Electron / 游戏状态 ──────────────────────────────────────
   const { isElectron, envChecked, analyzePosition, getEngineStatus } = useElectron();
@@ -352,6 +353,26 @@ export default function Home() {
     setError(null);
   }, [game]);
 
+  // ── 棋盘编辑器: 挑战 AI ──────────────────────────────────────
+
+  const handleChallengeFromEditor = useCallback(
+    (fen: string) => {
+      console.log('[page] 编辑器残局挑战 AI  FEN:', fen);
+      autoMoveGuard.current = false;
+      coachHintGuard.current = false;
+      lastCoachFenRef.current = '';
+      resignedRef.current = false;
+      setAiResult(null);
+      setError(null);
+      game.setGameMode('battle');
+      game.setAiDifficulty('medium');
+      game.setPlayerSide(Side.Red);
+      game.loadCustomFEN(fen);
+      setCurrentView('game');
+    },
+    [game]
+  );
+
   const handleUndo = useCallback(() => {
     const steps = game.gameMode === 'practice' ? 1 : 2;
     game.undoMove(steps);
@@ -446,6 +467,16 @@ export default function Home() {
       <HomeScreen
         onStartGame={handleStartGame}
         onOpenLibrary={() => setCurrentView('library')}
+        onOpenEditor={() => setCurrentView('editor')}
+      />
+    );
+  }
+
+  if (currentView === 'editor') {
+    return (
+      <BoardEditor
+        onChallengeAI={handleChallengeFromEditor}
+        onBack={handleBackToHome}
       />
     );
   }

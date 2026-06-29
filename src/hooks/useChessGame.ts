@@ -199,6 +199,9 @@ export interface UseChessGameReturn {
   // 存档恢复
   restoreFromSave: (data: RestoreData) => void;
 
+  /** 从自定义 FEN 加载残局 (供棋盘编辑器调用) */
+  loadCustomFEN: (fen: string) => void;
+
   // 棋谱装载 (来自数据库 ICCS 推演结果)
   recordMeta: GameRecordMeta | null;
   loadGameRecord: (
@@ -626,6 +629,38 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     setRecordMeta(null);
   }, [startFen]);
 
+  // ── 自定义 FEN 加载 (棋盘编辑器入口) ───────────────────────────
+
+  const loadCustomFEN = useCallback((fenStr: string) => {
+    const { board: b, sideToMove: s } = fenToBoard(fenStr);
+
+    console.log('[hook] loadCustomFEN → side=', turnChar(s), 'fen=', fenStr);
+
+    boardRef.current = b;
+    sideRef.current = s;
+    fenRef.current = fenStr;
+    fenHistoryRef.current = [fenStr];
+    boardHistoryRef.current = [b];
+    moveRecordsRef.current = [null];
+    currentMoveIndexRef.current = 0;
+
+    setGameState({ board: b, side: s });
+    setFen(fenStr);
+    setFenHistory([fenStr]);
+    setBoardHistory([b]);
+    setMoveRecords([null]);
+    setCurrentMoveIndex(0);
+    setGameStatus(deriveStatus(b, s));
+    setSelectedPos(null);
+    setLegalMoves([]);
+    setAiHints([]);
+    setIsThinking(false);
+    setCheckSide(null);
+    setWinner(null);
+    setLastCapture(null);
+    setRecordMeta(null);
+  }, []);
+
   // ── 认输 ──────────────────────────────────────────────────────
 
   const resign = useCallback(() => {
@@ -827,6 +862,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     resign,
     offerDraw,
     restoreFromSave,
+    loadCustomFEN,
     recordMeta,
     loadGameRecord,
     executeMove,

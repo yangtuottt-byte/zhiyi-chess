@@ -14,6 +14,7 @@ import SettingsModal from '@/components/SettingsModal';
 export interface HomeScreenProps {
   onStartGame: (mode: GameMode, difficulty: AIDifficulty, playerSide: Side) => void;
   onOpenLibrary: () => void;
+  onOpenEditor: () => void;
 }
 
 interface ModeCard {
@@ -60,7 +61,7 @@ const DIFFICULTY_OPTIONS: Array<{
   { key: 'hard', label: '困难', desc: '深度思考，挑战极限', icon: '👑', color: 'red' },
 ];
 
-export default function HomeScreen({ onStartGame, onOpenLibrary }: HomeScreenProps) {
+export default function HomeScreen({ onStartGame, onOpenLibrary, onOpenEditor }: HomeScreenProps) {
   const [selected, setSelected] = useState<GameMode>('practice');
   const [difficulty, setDifficulty] = useState<AIDifficulty>('medium');
   const [playerSide, setPlayerSide] = useState<Side>(Side.Red);
@@ -241,6 +242,39 @@ export default function HomeScreen({ onStartGame, onOpenLibrary }: HomeScreenPro
           </div>
 
           <div className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-500/30 text-cyan-400 transition-all duration-300 group-hover:border-cyan-400 group-hover:bg-cyan-500/10 group-hover:translate-x-1">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </button>
+
+        {/* ── 棋盘编辑器入口 ── */}
+        <button
+          onClick={() => { playUI(); onOpenEditor(); }}
+          className="group relative flex w-full max-w-3xl items-center gap-5 overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-red-500/5 px-6 py-5 text-left backdrop-blur-md transition-all duration-300 ease-out hover:-translate-y-2 hover:border-amber-400/40 hover:from-amber-500/10 hover:via-orange-500/10 hover:to-red-500/10 hover:shadow-2xl hover:shadow-amber-500/10"
+        >
+          {/* 光晕扫过 */}
+          <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-amber-400/10 to-transparent transition-transform duration-1000 group-hover:translate-x-full" />
+
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-3xl shadow-inner shadow-amber-500/10 transition-all duration-300 group-hover:bg-amber-500/20">
+            🧩
+          </div>
+
+          <div className="relative z-10 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xl font-bold tracking-wide text-amber-300 transition-colors duration-300 group-hover:text-amber-200">
+                自定义残局
+              </h3>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-amber-300/80">
+                Board Editor
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-500 transition-colors duration-300 group-hover:text-slate-400">
+              排兵布阵 · 自由摆位 · 挑战 AI
+            </p>
+          </div>
+
+          <div className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-500/30 text-amber-400 transition-all duration-300 group-hover:border-amber-400 group-hover:bg-amber-500/10 group-hover:translate-x-1">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
