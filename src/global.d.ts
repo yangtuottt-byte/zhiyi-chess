@@ -53,5 +53,6 @@ interface Window {
     }>;
     searchRecords(opts?: SearchRecordsOptions): Promise<SearchRecordsResult>;
     getRecordMoves(id: number): Promise<RecordWithMoves | null>;
+    quitApp(): Promise<void>;
   };
 }

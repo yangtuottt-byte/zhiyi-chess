@@ -79,13 +79,24 @@ export default function SettingsModal({
 
         {/* ── 关于 ── */}
         <div className="text-center space-y-1">
-          <p className="text-sm font-bold text-slate-300">智弈 (ZhiYi)</p>
-          <p className="text-xs text-slate-500">AI 象棋教练 · v1.0.0</p>
+          <p className="text-sm font-bold text-slate-300">智弈 · v1.0.0</p>
           <p className="text-[10px] text-slate-600">Powered by Pikafish Engine</p>
         </div>
 
-        {/* ── 关闭 ── */}
-        <div className="flex justify-center">
+        {/* ── 退出游戏 / 关闭 ── */}
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.api?.quitApp) {
+                window.api.quitApp();
+              } else {
+                window.close();
+              }
+            }}
+            className="rounded-lg border border-red-500/20 bg-red-500/10 px-5 py-2 text-sm font-medium text-red-400 backdrop-blur-md transition-all hover:border-red-500/40 hover:bg-red-500/20 hover:text-red-300 active:scale-95"
+          >
+            退出游戏
+          </button>
           <button
             onClick={onClose}
             className="text-xs text-slate-500 hover:text-slate-300 transition-colors"

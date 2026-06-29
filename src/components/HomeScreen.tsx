@@ -148,12 +148,15 @@ export default function HomeScreen({ onStartGame, onOpenLibrary, onOpenEditor }:
               智弈
             </span>
           </h1>
-          <p className="mt-4 text-sm font-light tracking-widest text-slate-400">
+          {/* <p className="mt-4 text-sm font-light tracking-widest text-slate-400">
             AI 象棋教练
-          </p>
-          <p className="mt-1 text-xs tracking-[0.3em] text-slate-600">
+          </p> */}
+          <p className="mt-4 text-sm font-light tracking-widest text-slate-400">
             探索棋道微光
           </p>
+          {/* <p className="mt-1 text-xs tracking-[0.3em] text-slate-600">
+            探索棋道微光
+          </p> */}
         </div>
 
         {/* ── 模式卡片 ── */}

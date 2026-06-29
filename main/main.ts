@@ -129,6 +129,11 @@ function registerIPC(): void {
       throw err;
     }
   });
+
+  /** 退出应用 */
+  ipcMain.handle('app:quit', async () => {
+    app.quit();
+  });
 }
 
 // ── 生命周期 ───────────────────────────────────────────────────────

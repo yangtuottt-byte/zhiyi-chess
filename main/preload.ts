@@ -63,4 +63,7 @@ contextBridge.exposeInMainWorld('api', {
    */
   getRecordMoves: (id: number): Promise<RecordWithMoves | null> =>
     ipcRenderer.invoke('records:get-moves', id),
+
+  /** 退出应用 */
+  quitApp: () => ipcRenderer.invoke('app:quit'),
 });
