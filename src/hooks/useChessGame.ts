@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { Board, Piece, Position, Side } from '@/core/types';
 import { getLegalMoves, isInCheck, isGameOver } from '@/core/rules';
 import { fenToBoard, boardToFen } from '@/lib/fen';
+import { positionsToUci } from '@/lib/uci';
 import { audio } from '@/lib/audio';
 import { recordResult } from '@/lib/stats';
 
@@ -168,6 +169,7 @@ export interface UseChessGameReturn {
 
   // 历史
   fenHistory: string[];
+  iccsMoveHistory: string[];
   canUndo: boolean;
 
   // 时光机
@@ -823,6 +825,14 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
 
   const isReviewing = currentMoveIndex < fenHistory.length - 1;
 
+  const iccsMoveHistory = useMemo(
+    () =>
+      moveRecords
+        .filter((r): r is MoveRecord => r !== null)
+        .map((r) => positionsToUci(r.from, r.to)),
+    [moveRecords]
+  );
+
   return {
     board,
     fen,
@@ -840,6 +850,7 @@ export function useChessGame(options?: UseChessGameOptions): UseChessGameReturn 
     selectedPos,
     legalMoves,
     fenHistory,
+    iccsMoveHistory,
     canUndo,
     currentMoveIndex,
     isReviewing,

@@ -8,9 +8,10 @@ export interface GameOverModalProps {
   reason: string;
   onNewGame: () => void;
   onBackToHome?: () => void;
+  onExport?: () => void;
 }
 
-export default function GameOverModal({ winner, reason, onNewGame, onBackToHome }: GameOverModalProps) {
+export default function GameOverModal({ winner, reason, onNewGame, onBackToHome, onExport }: GameOverModalProps) {
   const isDraw = winner === 'draw';
   const isRedWin = winner === 'w';
 
@@ -38,6 +39,19 @@ export default function GameOverModal({ winner, reason, onNewGame, onBackToHome 
 
         {/* 原因 */}
         <p className="text-sm text-gray-400">{reason}</p>
+
+        {/* 导出棋谱 */}
+        {onExport && (
+          <button
+            onClick={onExport}
+            className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-6 py-2.5 text-sm font-semibold text-cyan-300 backdrop-blur-md transition-all hover:border-cyan-400/50 hover:bg-cyan-500/20 hover:text-cyan-200 active:scale-95"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            导出棋谱
+          </button>
+        )}
 
         {/* 按钮组 */}
         <div className="flex gap-3 mt-2">

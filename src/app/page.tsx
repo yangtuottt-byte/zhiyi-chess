@@ -9,6 +9,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { uciToPositions } from '@/lib/uci';
 import { boardToFen } from '@/lib/fen';
 import { parseIccsToGameRecord } from '@/lib/pgnParser';
+import { generatePGN, downloadPGN } from '@/lib/pgnExporter';
 import { Side } from '@/core/types';
 import type { SaveSlot } from '@/lib/storage';
 import Chessboard from '@/components/Chessboard';
@@ -402,6 +403,36 @@ export default function Home() {
     }
   }, [game]);
 
+  // ── PGN 导出 ────────────────────────────────────────────────
+
+  const handleExportPGN = useCallback(() => {
+    const moveHistory = game.iccsMoveHistory;
+    if (moveHistory.length === 0) {
+      setToast({ message: '暂无走法记录可导出', type: 'info' });
+      return;
+    }
+
+    let result = '*';
+    if (game.winner === 'w') result = '1-0';
+    else if (game.winner === 'b') result = '0-1';
+    else if (game.winner === 'draw') result = '1/2-1/2';
+
+    const isRedPlayer = game.playerSide === Side.Red;
+    let redName = '玩家';
+    let blackName = 'AI';
+    if (game.gameMode === 'practice') {
+      redName = '玩家';
+      blackName = '玩家';
+    } else {
+      redName = isRedPlayer ? '玩家' : 'AI';
+      blackName = isRedPlayer ? 'AI' : '玩家';
+    }
+
+    const pgn = generatePGN(moveHistory, { red: redName, black: blackName, result });
+    downloadPGN(pgn);
+    setToast({ message: '棋谱导出成功', type: 'success' });
+  }, [game]);
+
   // ── 存档/读档 (多槽位) ─────────────────────────────────────
 
   const handleConfirmSave = useCallback((name: string) => {
@@ -549,6 +580,7 @@ export default function Home() {
             reason={getGameOverReason()}
             onNewGame={handleReset}
             onBackToHome={handleBackToHome}
+            onExport={handleExportPGN}
           />
         )}
       </div>
@@ -564,6 +596,7 @@ export default function Home() {
             onBack={game.goBack}
             onForward={game.goForward}
             onEnd={game.goToEnd}
+            onExport={handleExportPGN}
           />
           <MoveList
             fenHistory={game.fenHistory}
