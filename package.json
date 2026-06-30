@@ -5,15 +5,16 @@
   "main": "main-dist/main.js",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "build:main": "tsc -p tsconfig.main.json",
-    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
-    "postinstall": "electron-rebuild -f -w better-sqlite3 || echo \"[postinstall] electron-rebuild skipped\"",
-    "electron:dev": "npm run build:main && concurrently -k \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "npm run build:main && next build && electron-builder"
+    "build:next": "next build",
+    "build:electron": "tsc -p tsconfig.main.json",
+    "postinstall": "electron-builder install-app-deps",
+    "electron:dev": "npm run build:electron && concurrently -k \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "pack": "set CSC_IDENTITY_AUTO_DISCOVERY=false && npm run build:next && npm run build:electron && electron-builder --dir",
+    "dist": "set CSC_IDENTITY_AUTO_DISCOVERY=false && npm run build:next && npm run build:electron && electron-builder"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
+    "electron-serve": "^1.3.0",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
@@ -34,8 +35,12 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.ai.chess-coach",
-    "productName": "AI象棋教练",
+    "appId": "com.zhiyi.chess",
+    "productName": "智弈",
+    "forceCodeSigning": false,
+    "directories": {
+      "output": "dist"
+    },
     "files": [
       "main-dist/**/*",
       "out/**/*",
@@ -55,7 +60,16 @@
       "node_modules/better-sqlite3/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": null,
+      "sign": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "智弈"
     },
     "mac": {
       "target": "dmg"

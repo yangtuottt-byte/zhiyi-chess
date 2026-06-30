@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
+import serve from 'electron-serve';
 import { UCIEngine } from './engine';
 import {
   initDatabase,
@@ -11,18 +12,17 @@ import {
 
 const isDev = !app.isPackaged;
 
+const loadURL = serve({ directory: 'out' });
 // 引擎实例 (单例)
 let engine: UCIEngine | null = null;
 
-/** 获取引擎可执行文件路径 (自动根据平台选择最优二进制) */
+/** 获取引擎可执行文件路径，兼容开发与生产环境 */
 function getEnginePath(): string {
-  // 皮卡鱼引擎目录 (可按需替换为其他 UCI 引擎)
-  return path.join(
-    app.getAppPath(),
-    'engine',
-    '皮卡鱼 20260131',
-    'pikafish-bmi2'
-  );
+  const dir = app.isPackaged
+    ? process.resourcesPath              // 生产: extraResources → resources/
+    : app.getAppPath();                  // 开发: 项目根目录
+
+  return path.join(dir, 'engine', '皮卡鱼 20260131', 'pikafish-bmi2');
 }
 
 /** 启动 UCI 引擎 */
@@ -65,7 +65,8 @@ function createWindow(): void {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'out', 'index.html'));
+    // mainWindow.loadFile(path.join(__dirname, '..', 'out', 'index.html'));
+    loadURL(mainWindow);
   }
 }
 
